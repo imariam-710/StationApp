@@ -1,0 +1,44 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: station-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    # Uncomment to reach this MongoDB from your host machine (e.g. with
+    # MongoDB Compass) — not needed for the app itself to work.
+    # ports:
+    #   - "27017:27017"
+
+  server:
+    build: ./server
+    container_name: station-server
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      MONGO_URI: mongodb+srv://mariammhmmd710_db_user:hr-12345@cluster0.jrldccv.mongodb.net/station_pro
+      PORT: 3000
+      JWT_SECRET: ${sp758f21f89a97c38af710c}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@station.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@12345}
+      # Required inside Docker — see the comment in server/server.js.
+      DISABLE_DNS_OVERRIDE: "true"
+    ports:
+      - "3000:3000"
+
+  client:
+    build:
+      context: ./client
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+    container_name: station-client
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "5500:80"
+
+volumes:
+  mongo-data:

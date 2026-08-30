@@ -1,0 +1,164 @@
+body {
+  background: #f4f6f9;
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: #1e293b;
+}
+
+.mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.text-end input,
+input.text-end {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.navbar-brand {
+  letter-spacing: 0.02em;
+  font-weight: 700;
+}
+
+.table-sticky-head thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #0f2a44 0%, #15375a 45%, #f4f6f9 45%);
+}
+
+.station-name-input {
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  font-weight: 700;
+  font-size: 19px;
+  padding: 2px 0;
+}
+.station-name-input:focus {
+  outline: none;
+  border-bottom: 1px solid #2563eb;
+  box-shadow: none;
+}
+
+/* Manually-entered fields get a distinct highlight (matching the yellow
+   convention used on the paper/Excel ledgers) so it's obvious at a glance
+   which cells you're expected to type into, versus which are calculated
+   automatically. Scoped to table cells, card bodies, and bordered input
+   groups (like the price bar on Daily Sales) — the only places data-entry
+   fields appear in the app — so it doesn't affect the station name, month
+   picker, or the login/register forms. */
+.table td input.form-control:not([readonly]):not(.readonly),
+.table td select.form-select,
+.card input.form-control:not([readonly]):not(.readonly),
+.card select.form-select,
+.border.rounded input.form-control:not([readonly]):not(.readonly) {
+  background-color: #fff8dc;
+  border-color: #ecd67a;
+}
+.table td input.form-control:not([readonly]):not(.readonly):focus,
+.table td select.form-select:focus,
+.card input.form-control:not([readonly]):not(.readonly):focus,
+.card select.form-select:focus,
+.border.rounded input.form-control:not([readonly]):not(.readonly):focus {
+  background-color: #fff3bf;
+  border-color: #e0b100;
+  box-shadow: 0 0 0 0.2rem rgba(224, 177, 0, 0.25);
+}
+
+/* Computed / read-only cells stay neutral, reinforcing the contrast. */
+.table td input.form-control.readonly,
+.table td input.form-control[readonly] {
+  background-color: #f8f9fa !important;
+  border-color: #dee2e6 !important;
+}
+
+/* ==========================================================================
+   Responsive sizing — phone / tablet / laptop / large desktop
+   ========================================================================== */
+
+html {
+  -webkit-text-size-adjust: 100%; /* stop iOS Safari auto-zooming text */
+}
+
+/* A stray wide element (a table that didn't get wrapped, a long word, etc.)
+   should never force the whole PAGE to scroll sideways — only the specific
+   .table-responsive containers should scroll horizontally, on purpose. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.table-responsive {
+  -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS */
+}
+
+/* Phones (portrait and small landscape) — tighten density and keep every
+   tap target comfortably large. */
+@media (max-width: 576px) {
+  body {
+    font-size: 14px;
+  }
+  h1 { font-size: 1.6rem; }
+  h4 { font-size: 1.1rem; }
+  h5 { font-size: 1rem; }
+  h6 { font-size: 0.92rem; }
+
+  .table {
+    font-size: 12.5px;
+  }
+  .table td,
+  .table th {
+    padding: 6px 6px;
+  }
+
+  /* Bootstrap's own sizes are a bit small for a thumb on a phone screen. */
+  .form-control,
+  .form-select {
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .form-control-sm,
+  .form-select-sm {
+    min-height: 36px;
+    font-size: 13.5px;
+  }
+
+  .btn {
+    min-height: 38px;
+  }
+  .btn-sm {
+    min-height: 32px;
+  }
+
+  .navbar-brand {
+    font-size: 15px;
+  }
+
+  .card-body {
+    padding: 0.85rem;
+  }
+
+  /* The date/fuel/paid-via grouping on Daily Sales gets tight on a phone —
+     let the date column shrink a bit so the rest still fits reasonably. */
+  .table td input[type='date'] {
+    min-width: 0;
+  }
+}
+
+/* Tablets (iPad-sized) — a little roomier than phones, still denser than desktop. */
+@media (min-width: 577px) and (max-width: 991px) {
+  .table {
+    font-size: 13px;
+  }
+  .card-body {
+    padding: 1rem;
+  }
+}
+
+/* Laptop and up — this is what the app was originally designed around;
+   no changes needed beyond Bootstrap's own responsive container padding. */
