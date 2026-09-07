@@ -44,6 +44,22 @@ const DEFAULT_OIL_PRODUCTS = [
   'Brake Oils 4L',
 ].map((name) => ({ name, buy: 0, sell: 0, qtyCash: 0, qtyCard: 0, openingStock: 0, deliveries: 0 }));
 
+function emptyMeter() {
+  return { opening: 0, closing: 0 };
+}
+
+// Matches the 8-pump layout on the station's own pump-meter sheet. Add or
+// remove pumps freely afterward — this is just the starting point.
+function defaultPumps() {
+  return Array.from({ length: 8 }, (_, i) => ({
+    pumpNo: i + 1,
+    super: emptyMeter(),
+    regular: emptyMeter(),
+    diesel: emptyMeter(),
+    vpower: emptyMeter(),
+  }));
+}
+
 function emptyDay() {
   return { date: '', entries: [] };
 }
@@ -58,6 +74,7 @@ function defaultDoc(month) {
     expenses: DEFAULT_EXPENSES,
     partners: 2,
     cashToBank: 0,
+    pumps: defaultPumps(),
   };
 }
 
@@ -96,6 +113,22 @@ function computeOilClosingStock(doc) {
   return closing;
 }
 
+// Closing meter readings per pump for a saved month, keyed by pump number —
+// becomes next month's opening readings automatically (meters are
+// cumulative and never reset).
+function computePumpClosingReadings(doc) {
+  const closing = {};
+  (doc.pumps || []).forEach((p) => {
+    closing[p.pumpNo] = {
+      super: p.super?.closing || 0,
+      regular: p.regular?.closing || 0,
+      diesel: p.diesel?.closing || 0,
+      vpower: p.vpower?.closing || 0,
+    };
+  });
+  return closing;
+}
+
 // GET /api/months -> list of months that have saved data, oldest first
 router.get('/', async (req, res) => {
   try {
@@ -118,16 +151,40 @@ router.get('/:month', async (req, res) => {
     const prevDoc = await MonthData.findOne({ month: prevMonthStr(req.params.month) });
     if (prevDoc) {
       const closing = computeClosingStock(prevDoc);
-      base.grades = base.grades.map((g) => ({
-        ...g,
-        openingStock: closing[g.key] || 0,
-      }));
+      const prevGradesByKey = {};
+      (prevDoc.grades || []).forEach((g) => { prevGradesByKey[g.key] = g; });
+
+      base.grades = base.grades.map((g) => {
+        const prevGrade = prevGradesByKey[g.key];
+        return {
+          ...g,
+          openingStock: closing[g.key] || 0,
+          // Prices carry forward from last month and stay fixed until the
+          // user changes them — they do NOT reset to 0 every month.
+          buy: prevGrade ? prevGrade.buy : g.buy,
+          priceCash: prevGrade ? prevGrade.priceCash : g.priceCash,
+          priceCard: prevGrade ? prevGrade.priceCard : g.priceCard,
+        };
+      });
 
       const oilClosing = computeOilClosingStock(prevDoc);
       base.oilProducts = base.oilProducts.map((p) => ({
         ...p,
         openingStock: oilClosing[p.name] || 0,
       }));
+
+      const pumpClosing = computePumpClosingReadings(prevDoc);
+      base.pumps = base.pumps.map((p) => {
+        const prevReadings = pumpClosing[p.pumpNo];
+        if (!prevReadings) return p;
+        return {
+          ...p,
+          super: { opening: prevReadings.super, closing: 0 },
+          regular: { opening: prevReadings.regular, closing: 0 },
+          diesel: { opening: prevReadings.diesel, closing: 0 },
+          vpower: { opening: prevReadings.vpower, closing: 0 },
+        };
+      });
     }
     res.json(base);
   } catch (err) {
