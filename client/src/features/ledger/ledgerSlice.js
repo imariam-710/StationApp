@@ -146,6 +146,30 @@ const ledgerSlice = createSlice({
     setCashToBank(state, action) {
       state.data.cashToBank = Math.max(0, numOrZero(action.payload));
     },
+
+    addPump(state) {
+      if (!state.data.pumps) state.data.pumps = [];
+      const nextNo = state.data.pumps.length
+        ? Math.max(...state.data.pumps.map((p) => p.pumpNo)) + 1
+        : 1;
+      state.data.pumps.push({
+        pumpNo: nextNo,
+        super: { opening: 0, closing: 0 },
+        regular: { opening: 0, closing: 0 },
+        diesel: { opening: 0, closing: 0 },
+        vpower: { opening: 0, closing: 0 },
+      });
+    },
+    deletePump(state, { payload: index }) {
+      state.data.pumps.splice(index, 1);
+    },
+    // field is 'opening' or 'closing' on a given fuel's meter for that pump.
+    updatePumpMeter(state, { payload: { index, fuel, field, value } }) {
+      const pump = state.data.pumps?.[index];
+      if (!pump) return;
+      if (!pump[fuel]) pump[fuel] = { opening: 0, closing: 0 };
+      pump[fuel][field] = numOrZero(value);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -203,6 +227,9 @@ export const {
   deleteExpenseRow,
   setPartners,
   setCashToBank,
+  addPump,
+  deletePump,
+  updatePumpMeter,
 } = ledgerSlice.actions;
 
 export default ledgerSlice.reducer;
