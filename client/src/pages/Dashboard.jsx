@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Container, Input, Label, Spinner } from 'reactstrap';
 import TopMenu from '../components/TopMenu.jsx';
 import DailySalesTab from '../components/tabs/DailySalesTab.jsx';
+import PumpMetersTab from '../components/tabs/PumpMetersTab.jsx';
 import PaymentsTab from '../components/tabs/PaymentsTab.jsx';
 import StockTab from '../components/tabs/StockTab.jsx';
 import FuelMarginTab from '../components/tabs/FuelMarginTab.jsx';
@@ -19,6 +20,7 @@ import {
 
 const TABS = {
   daily: DailySalesTab,
+  pumps: PumpMetersTab,
   payments: PaymentsTab,
   stock: StockTab,
   fuel: FuelMarginTab,
