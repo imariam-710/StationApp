@@ -5,7 +5,7 @@ import { setPartners, setCashToBank } from '../../features/ledger/ledgerSlice.js
 import {
   PAYMENT_TYPES, revenueByGrade, fuelProfitByGrade, fuelProfitTotal, totalPayments,
   oilProfitTotal, oilCashTotal, oilCardTotal, deductionsTotal, expensesTotal,
-  stockLossByGrade, stockLossTotal, n, fmt, monthLabel,
+  stockLossByGrade, stockLossTotal, totalLiters, pumpLitersByGrade, n, fmt, monthLabel,
 } from '../../utils/calc.js';
 import { downloadMonthlySummaryPDF } from '../../utils/pdfReport.js';
 
@@ -17,6 +17,8 @@ export default function SummaryTab() {
   if (!data) return null;
 
   const grades = data.grades || [];
+  const dailyLiters = totalLiters(data.dailySales);
+  const pumpLiters = pumpLitersByGrade(data.pumps || []);
   const revenue = revenueByGrade(data.dailySales, grades);
   const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
   const payments = totalPayments(data.dailySales, grades);
@@ -111,6 +113,36 @@ export default function SummaryTab() {
       <p className="text-muted small mb-4" style={{ marginTop: -12 }}>
         Reference only — doesn't affect profit. A positive difference is cash still on hand; a
         negative one means more was banked than collected (or a shortfall to look into).
+      </p>
+
+      <h6 className="fw-bold mb-2">Pump meters</h6>
+      <div className="table-responsive mb-4">
+        <Table bordered className="bg-white align-middle mb-0">
+          <thead className="table-light">
+            <tr>
+              <th></th>
+              {grades.map((g) => <th key={g.key} className="text-end">{g.name}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="fw-semibold">Pump Meter Litres</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(pumpLiters[g.key], 0)}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="fw-semibold">Daily Sales Litres</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(dailyLiters[g.key], 0)}</td>
+              ))}
+            </tr>
+          </tbody>
+        </Table>
+      </div>
+      <p className="text-muted small mb-4" style={{ marginTop: -12 }}>
+        From the <strong>Pump Meters</strong> tab — a cross-check against Daily Sales, not used in
+        any profit calculation.
       </p>
 
       <h6 className="fw-bold mb-2">Sales by grade</h6>
