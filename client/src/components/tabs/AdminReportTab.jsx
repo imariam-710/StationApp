@@ -5,7 +5,7 @@ import {
   revenueByGrade, fuelProfitByGrade, fuelProfitTotal, buyAmountByGrade, totalLiters,
   oilProfitTotal, oilCashTotal, oilCardTotal, deductionsTotal, expensesTotal,
   stockLossByGrade, stockLossTotal, cardReductionByGrade, cardReductionTotal,
-  n, fmt, monthLabel,
+  pumpLitersByGrade, n, fmt, monthLabel,
 } from '../../utils/calc.js';
 import { downloadAdminReportPDF } from '../../utils/pdfReport.js';
 
@@ -27,6 +27,7 @@ export default function AdminReportTab() {
 
   const grades = data.grades || [];
   const liters = totalLiters(data.dailySales);
+  const pumpLiters = pumpLitersByGrade(data.pumps || []);
   const revenue = revenueByGrade(data.dailySales, grades);
   const buyAmount = buyAmountByGrade(grades, data.dailySales);
   const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
@@ -65,6 +66,43 @@ export default function AdminReportTab() {
       <p className="text-muted small mb-4">
         Full cost breakdown — buying prices and margins included. Visible to admin accounts only.
       </p>
+
+      <h6 className="fw-bold mb-2">Pump meters</h6>
+      <div className="table-responsive mb-4">
+        <Table bordered className="bg-white align-middle mb-0">
+          <thead className="table-light">
+            <tr>
+              <th></th>
+              {grades.map((g) => <th key={g.key} className="text-end">{g.name}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="fw-semibold">Pump Meter Litres</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(pumpLiters[g.key], 0)}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="fw-semibold">Daily Sales Litres</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(liters[g.key], 0)}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="fw-semibold">Difference</td>
+              {grades.map((g) => {
+                const diff = (pumpLiters[g.key] || 0) - (liters[g.key] || 0);
+                return (
+                  <td key={g.key} className={`text-end mono ${Math.abs(diff) > 0.5 ? 'text-danger fw-bold' : 'text-muted'}`}>
+                    {fmt(diff, 0)}
+                  </td>
+                );
+              })}
+            </tr>
+          </tbody>
+        </Table>
+      </div>
 
       <h6 className="fw-bold mb-2">Fuel cost &amp; margin by grade</h6>
       <div className="table-responsive mb-4">
