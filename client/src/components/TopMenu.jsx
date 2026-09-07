@@ -8,6 +8,7 @@ import { logout } from '../features/auth/authSlice.js';
 
 const BASE_TABS = [
   { key: 'daily', label: 'Daily Sales' },
+  { key: 'pumps', label: 'Pump Meters' },
   { key: 'payments', label: 'Payments' },
   { key: 'stock', label: 'Tank Stock' },
   { key: 'fuel', label: 'Fuel Margin' },
