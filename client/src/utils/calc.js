@@ -209,6 +209,23 @@ export function stockSummary(grades = [], dailySales = []) {
   return result;
 }
 
+// Litres sold per grade, derived from pump meter readings (closing minus
+// opening, summed across all pumps that dispense that fuel) — an
+// independent cross-check against the Daily Sales litres total. Purely
+// informational; it doesn't feed into any profit calculation.
+export function pumpLitersByGrade(pumps = []) {
+  const t = { super: 0, regular: 0, diesel: 0, vpower: 0 };
+  pumps.forEach((p) => {
+    FUEL_KEYS.forEach((k) => {
+      const m = p[k];
+      if (!m) return;
+      const diff = n(m.closing) - n(m.opening);
+      if (diff > 0) t[k] += diff;
+    });
+  });
+  return t;
+}
+
 // Stock remaining after each day's sales — starts at opening + deliveries,
 // and drops by that day's litres sold, day by day, per fuel.
 export function dailyRunningStock(grades = [], dailySales = []) {
