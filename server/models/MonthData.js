@@ -21,6 +21,30 @@ const GradeSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const MeterReadingSchema = new mongoose.Schema(
+  {
+    opening: { type: Number, default: 0 }, // carried over from last month's closing reading
+    closing: { type: Number, default: 0 }, // entered manually at month end
+  },
+  { _id: false }
+);
+
+// One physical pump can dispense more than one fuel grade (multiple nozzles
+// on the same dispenser) — matches the station's own pump-meter sheet.
+// Litres sold per fuel per pump = closing reading − opening reading. This
+// is purely a cross-check against the Daily Sales litres total; it doesn't
+// feed into any profit calculation.
+const PumpSchema = new mongoose.Schema(
+  {
+    pumpNo: { type: Number, required: true },
+    super: { type: MeterReadingSchema, default: () => ({}) },
+    regular: { type: MeterReadingSchema, default: () => ({}) },
+    diesel: { type: MeterReadingSchema, default: () => ({}) },
+    vpower: { type: MeterReadingSchema, default: () => ({}) },
+  },
+  { _id: false }
+);
+
 // One sale: a fuel, a quantity, at a specific price, paid for a specific
 // way. Price is locked in at the time the sale is entered (or its fuel/
 // payment method changed) — it does NOT update if the grade's price is
@@ -95,6 +119,7 @@ const MonthDataSchema = new mongoose.Schema(
     // How much of the cash collected was deposited to the bank this month
     // (entered manually) — shown for reconciliation on the Summary tab.
     cashToBank: { type: Number, default: 0 },
+    pumps: [PumpSchema],
   },
   { timestamps: true }
 );
