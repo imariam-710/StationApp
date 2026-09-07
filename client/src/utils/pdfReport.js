@@ -4,7 +4,7 @@ import {
   PAYMENT_TYPES, revenueByGrade, fuelProfitByGrade, fuelProfitTotal, buyAmountByGrade,
   totalLiters, totalPayments, oilProfitTotal, oilCashTotal, oilCardTotal, oilQty,
   deductionsTotal, expensesTotal, stockLossByGrade, stockLossTotal,
-  cardReductionByGrade, cardReductionTotal,
+  cardReductionByGrade, cardReductionTotal, pumpLitersByGrade,
   monthLabel, n, fmt,
 } from './calc.js';
 
@@ -46,6 +46,8 @@ export function downloadMonthlySummaryPDF({ stationName, currentMonth, data }) {
   const margin = 40;
 
   const grades = data.grades || [];
+  const dailyLiters = totalLiters(data.dailySales);
+  const pumpLiters = pumpLitersByGrade(data.pumps || []);
   const revenue = revenueByGrade(data.dailySales, grades);
   const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
   const payments = totalPayments(data.dailySales, grades);
@@ -73,6 +75,23 @@ export function downloadMonthlySummaryPDF({ stationName, currentMonth, data }) {
       y = 50;
     }
   };
+
+  // --- Pump meters ---
+  sectionHeading(doc, 'Pump Meters', margin, y);
+  y += 8;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    head: [['', ...grades.map((g) => g.name)]],
+    body: [
+      ['Pump Meter Litres', ...grades.map((g) => fmt(pumpLiters[g.key], 0))],
+      ['Daily Sales Litres', ...grades.map((g) => fmt(dailyLiters[g.key], 0))],
+    ],
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: NAVY },
+    theme: 'grid',
+  });
+  y = doc.lastAutoTable.finalY + 24;
 
   // --- Payments received ---
   sectionHeading(doc, 'Payments Received', margin, y);
@@ -266,6 +285,7 @@ export function downloadAdminReportPDF({ stationName, currentMonth, data }) {
 
   const grades = data.grades || [];
   const liters = totalLiters(data.dailySales);
+  const pumpLiters = pumpLitersByGrade(data.pumps || []);
   const revenue = revenueByGrade(data.dailySales, grades);
   const buyAmount = buyAmountByGrade(grades, data.dailySales);
   const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
@@ -297,6 +317,24 @@ export function downloadAdminReportPDF({ stationName, currentMonth, data }) {
       y = 50;
     }
   };
+
+  // --- Pump meters ---
+  sectionHeading(doc, 'Pump Meters', margin, y);
+  y += 8;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    head: [['', ...grades.map((g) => g.name)]],
+    body: [
+      ['Pump Meter Litres', ...grades.map((g) => fmt(pumpLiters[g.key], 0))],
+      ['Daily Sales Litres', ...grades.map((g) => fmt(liters[g.key], 0))],
+      ['Difference', ...grades.map((g) => fmt((pumpLiters[g.key] || 0) - (liters[g.key] || 0), 0))],
+    ],
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: NAVY },
+    theme: 'grid',
+  });
+  y = doc.lastAutoTable.finalY + 24;
 
   // --- Fuel cost & margin by grade ---
   sectionHeading(doc, 'Fuel Cost & Margin by Grade', margin, y);
