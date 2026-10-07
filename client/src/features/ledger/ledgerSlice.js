@@ -81,6 +81,40 @@ function ensureDailySalesForMonth(data, month) {
   data.dailySales = rebuilt;
 }
 
+// The station has 8 pumps. If a month was saved with an extra, completely
+// untouched pump (every meter reading zero, on the Pump Meters tab and on
+// every day), drop it — nothing is lost. A pump beyond 8 that has any
+// reading entered is left alone so no data is ever deleted silently.
+const STATION_PUMP_COUNT = 8;
+function trimEmptyExtraPumps(data) {
+  if (!data) return;
+  if (!Array.isArray(data.pumps)) data.pumps = [];
+  // Make sure pumps 1–8 always exist (a month saved with fewer gets the
+  // missing ones added, all zero) so every day starts with all 8 rows.
+  for (let no = 1; no <= STATION_PUMP_COUNT; no++) {
+    if (!data.pumps.some((p) => p.pumpNo === no)) {
+      data.pumps.push({
+        pumpNo: no,
+        super: { opening: 0, closing: 0 },
+        regular: { opening: 0, closing: 0 },
+        diesel: { opening: 0, closing: 0 },
+        vpower: { opening: 0, closing: 0 },
+      });
+    }
+  }
+  data.pumps.sort((a, b) => a.pumpNo - b.pumpNo);
+  if (data.pumps.length <= STATION_PUMP_COUNT) return;
+  const isEmptyPump = (pumpNo) => {
+    const monthly = data.pumps.find((p) => p.pumpNo === pumpNo);
+    const monthlyUsed = monthly && FUEL_KEYS.some((k) => numOrZero(monthly[k]?.opening) || numOrZero(monthly[k]?.closing));
+    if (monthlyUsed) return false;
+    return !(data.dailySales || []).some((day) =>
+      (day.pumps || []).some((p) => p.pumpNo === pumpNo && FUEL_KEYS.some((k) => numOrZero(p[k]))));
+  };
+  const keep = data.pumps.filter((p, i) => i < STATION_PUMP_COUNT || !isEmptyPump(p.pumpNo));
+  data.pumps = keep;
+}
+
 export const fetchMonth = createAsyncThunk('ledger/fetchMonth', async (month) => {
   const res = await api.get(`/months/${month}`);
   return res.data;
@@ -291,6 +325,7 @@ const ledgerSlice = createSlice({
       .addCase(fetchMonth.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.data = action.payload;
+        trimEmptyExtraPumps(state.data);
         ensureDailySalesForMonth(state.data, action.meta.arg);
       })
       .addCase(fetchMonth.rejected, (state, action) => {
