@@ -2,17 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Table, Button } from 'reactstrap';
 import {
-  addEntry, updateEntry, deleteEntry, updateGrade,
+  updateDayPumpReading, updateDayShellCardLiters, updateDayField,
 } from '../../features/ledger/ledgerSlice.js';
 import {
-  FUEL_KEYS, PAYMENT_TYPES, totalLiters, revenueByGrade, dailyRunningStock, n, fmt,
+  FUEL_KEYS, dailyPumpSalesLiters, dailyPaymentTotals, dailyRunningStock, n, fmt,
 } from '../../utils/calc.js';
 
 const FUEL_LABELS = {
   super: 'Super',
   regular: 'Regular',
   diesel: 'Diesel',
-  vpower: 'V-Power',
+  vpower: 'V/Power',
 };
 
 function todayMonthStr() {
@@ -43,6 +43,7 @@ export default function DailySalesTab() {
   const dispatch = useDispatch();
   const grades = useSelector((s) => s.ledger.data?.grades) || [];
   const dailySales = useSelector((s) => s.ledger.data?.dailySales) || [];
+  const monthlyPumps = useSelector((s) => s.ledger.data?.pumps) || [];
   const currentMonth = useSelector((s) => s.ledger.currentMonth);
 
   const [dayIndex, setDayIndex] = useState(() => defaultDayIndex(dailySales, currentMonth));
@@ -55,17 +56,32 @@ export default function DailySalesTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth]);
 
-  const liters = totalLiters(dailySales);
-  const revenue = revenueByGrade(dailySales, grades);
-  const grandRevenue = FUEL_KEYS.reduce((sum, k) => sum + (revenue[k] || 0), 0);
-  const running = dailyRunningStock(grades, dailySales);
-
   const lastIndex = Math.max(dailySales.length - 1, 0);
   const clampedIndex = Math.min(Math.max(dayIndex, 0), lastIndex);
-  const day = dailySales[clampedIndex] || { date: '', entries: [] };
-  const entries = day.entries || [];
-  const remaining = running[clampedIndex]?.remaining || {};
+  const day = dailySales[clampedIndex] || {
+    date: '', pumps: [], shellCardLiters: {}, subsidyAmount: 0, siteCredit: 0, other: 0,
+    telephoneCard: 0, visaCard: 0,
+  };
+  const dayPumps = day.pumps || [];
+  const shellCardLiters = day.shellCardLiters || {};
   const isToday = currentMonth === todayMonthStr() && day.date === todayDateStr();
+
+  const priceByFuel = {};
+  grades.forEach((g) => { priceByFuel[g.key] = n(g.priceCash); });
+
+  const pumpSales = dailyPumpSalesLiters(dailySales, monthlyPumps);
+  const dayPumpResult = pumpSales[clampedIndex] || { totals: {}, liters: {} };
+
+  const amountByFuel = {};
+  FUEL_KEYS.forEach((k) => { amountByFuel[k] = (dayPumpResult.liters[k] || 0) * (priceByFuel[k] || 0); });
+
+  const dayPayments = dailyPaymentTotals(dailySales, grades, monthlyPumps)[clampedIndex] || {
+    cash: 0, card: 0, subsidy: 0, siteCredit: 0, chitties: 0, telephoneCard: 0, totalSale: 0,
+  };
+  const cashToBank = Math.max(dayPayments.cash - n(day.visaCard), 0);
+
+  const running = dailyRunningStock(grades, dailySales, monthlyPumps);
+  const remaining = running[clampedIndex]?.remaining || {};
 
   const goTo = (idx) => setDayIndex(Math.min(Math.max(idx, 0), lastIndex));
 
@@ -74,40 +90,10 @@ export default function DailySalesTab() {
       <h4 className="mb-1">Daily pump sales</h4>
       <p className="text-muted small mb-3">
         One page per day of the month, just like the station's Excel ledger (Day 1, Day 2, Day 3
-        …). Set this month's cash and card price per litre for each fuel below — they're often
-        different. For the day shown, add one row per sale; the same fuel can appear more than
-        once if it was sold via different payment methods (or just sold several times). Each sale
-        automatically uses whatever cash/card price is set above at the moment it's added —
-        <strong> changing the price above only affects new sales from now on, not ones already
-        entered</strong>. Amounts flow straight into the <strong>Payments</strong> tab, and
-        remaining tank stock below updates automatically.
+        …). Everything highlighted is filled in by hand, same as the paper sheet's yellow cells;
+        everything else is calculated for you. Cash/card prices are set on the{' '}
+        <strong>Fuel Margin</strong> tab.
       </p>
-
-      <div className="d-flex flex-wrap gap-3 mb-4">
-        {grades.map((g, i) => (
-          <div key={g.key} className="border rounded bg-white px-3 py-2">
-            <div className="fw-semibold small mb-2">{g.name}</div>
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <span className="text-muted small" style={{ width: 62 }}>Cash /L</span>
-              <input
-                type="number" step="any" className="form-control form-control-sm text-end"
-                style={{ width: 90 }}
-                value={g.priceCash || 0}
-                onChange={(e) => dispatch(updateGrade({ index: i, field: 'priceCash', value: e.target.value }))}
-              />
-            </div>
-            <div className="d-flex align-items-center gap-2">
-              <span className="text-muted small" style={{ width: 62 }}>Card /L</span>
-              <input
-                type="number" step="any" className="form-control form-control-sm text-end"
-                style={{ width: 90 }}
-                value={g.priceCard || 0}
-                onChange={(e) => dispatch(updateGrade({ index: i, field: 'priceCard', value: e.target.value }))}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
 
       <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
         <Button color="primary" outline size="sm" onClick={() => goTo(clampedIndex - 1)} disabled={clampedIndex <= 0}>
@@ -140,120 +126,158 @@ export default function DailySalesTab() {
         Day {clampedIndex + 1} — {dayLabel(day.date)}{isToday && <span className="badge bg-success ms-2">Today</span>}
       </h5>
 
-      <div className="table-responsive">
-        <Table bordered className="bg-white align-middle mb-2">
+      <div className="table-responsive mb-0">
+        <Table bordered className="bg-white align-middle mb-0">
           <thead className="table-light">
             <tr>
-              <th style={{ width: 160 }}>Fuel</th>
-              <th className="text-end" style={{ width: 100 }}>Litres</th>
-              <th style={{ width: 150 }}>Paid via</th>
-              <th className="text-end" style={{ width: 120 }}>Amount</th>
-              <th style={{ width: 40 }}></th>
+              <th style={{ width: 90 }}>Pump No</th>
+              {FUEL_KEYS.map((k) => <th key={k} className="text-end">{FUEL_LABELS[k]}</th>)}
             </tr>
           </thead>
           <tbody>
-            {(entries.length ? entries : [null]).map((entry, ei) => {
-              const amount = entry ? n(entry.liters) * n(entry.price) : 0;
-              return (
-                <tr key={ei}>
-                  {entry ? (
-                    <>
-                      <td>
-                        <select
-                          className="form-select form-select-sm"
-                          value={entry.fuel}
-                          onChange={(e) => dispatch(updateEntry({ dayIndex: clampedIndex, entryIndex: ei, field: 'fuel', value: e.target.value }))}
-                        >
-                          {FUEL_KEYS.map((k) => (
-                            <option key={k} value={k}>{FUEL_LABELS[k]}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="text-end">
-                        <input
-                          type="number" step="any" className="form-control form-control-sm text-end"
-                          value={entry.liters || 0}
-                          onChange={(e) => dispatch(updateEntry({ dayIndex: clampedIndex, entryIndex: ei, field: 'liters', value: e.target.value }))}
-                        />
-                      </td>
-                      <td>
-                        <select
-                          className="form-select form-select-sm"
-                          value={entry.paymentType}
-                          onChange={(e) => dispatch(updateEntry({ dayIndex: clampedIndex, entryIndex: ei, field: 'paymentType', value: e.target.value }))}
-                        >
-                          {PAYMENT_TYPES.map((p) => (
-                            <option key={p.key} value={p.key}>{p.label}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="text-end mono text-muted">{fmt(amount)}</td>
-                      <td className="text-center">
-                        <Button close aria-label="Delete sale" onClick={() => dispatch(deleteEntry({ dayIndex: clampedIndex, entryIndex: ei }))} />
-                      </td>
-                    </>
-                  ) : (
-                    <td colSpan={4} className="text-muted small fst-italic">
-                      No sales entered for this day yet.
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </Table>
-      </div>
-      <Button
-        color="link" size="sm" className="p-0 text-decoration-none mb-4"
-        onClick={() => dispatch(addEntry({ dayIndex: clampedIndex }))}
-      >
-        + Add sale for this day
-      </Button>
-
-      <h6 className="fw-bold mb-2">Remaining in tank stock — end of day {clampedIndex + 1}</h6>
-      <div className="table-responsive mb-4">
-        <Table bordered className="bg-white align-middle" style={{ maxWidth: 560 }}>
-          <thead className="table-light">
-            <tr>
-              {grades.map((g) => <th key={g.key} className="text-end">{g.name}</th>)}
+            {dayPumps.map((p, pi) => (
+              <tr key={p.pumpNo}>
+                <td className="fw-semibold">{p.pumpNo}</td>
+                {FUEL_KEYS.map((k) => (
+                  <td key={k} className="text-end">
+                    <input
+                      type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                      value={p[k] || 0}
+                      onChange={(e) => dispatch(updateDayPumpReading({ dayIndex: clampedIndex, pumpIndex: pi, fuel: k, value: e.target.value }))}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+            <tr className="table-light fw-bold">
+              <td>Total</td>
+              {FUEL_KEYS.map((k) => (
+                <td key={k} className="text-end mono">{fmt(dayPumpResult.totals[k], 0)}</td>
+              ))}
             </tr>
-          </thead>
-          <tbody>
             <tr>
-              {grades.map((g) => (
-                <td key={g.key} className="text-end mono">{fmt(remaining[g.key], 0)}</td>
+              <td className="fw-semibold">Sales Lt.</td>
+              {FUEL_KEYS.map((k) => (
+                <td key={k} className="text-end mono text-muted">{fmt(dayPumpResult.liters[k], 0)}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="fw-semibold">Amount</td>
+              {FUEL_KEYS.map((k) => (
+                <td key={k} className="text-end mono text-muted">{fmt(amountByFuel[k])}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="fw-semibold">Shell card (Lt.)</td>
+              {FUEL_KEYS.map((k) => (
+                <td key={k} className="text-end">
+                  <input
+                    type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                    value={shellCardLiters[k] || 0}
+                    onChange={(e) => dispatch(updateDayShellCardLiters({ dayIndex: clampedIndex, fuel: k, value: e.target.value }))}
+                  />
+                </td>
               ))}
             </tr>
           </tbody>
         </Table>
       </div>
+      <p className="text-muted small mb-4">
+        Enter each pump's meter reading per fuel — Total, Sales Lt. and Amount are calculated for
+        you. Shell card (Lt.) is the litres sold via Shell fleet card this day, entered by hand.
+      </p>
 
-      <h6 className="fw-bold mb-2">Totals this month</h6>
-      <div className="table-responsive">
-        <Table bordered className="bg-white align-middle" style={{ maxWidth: 560 }}>
-          <thead className="table-light">
-            <tr>
-              <th>Fuel</th>
-              <th className="text-end">Litres Sold</th>
-              <th className="text-end">Revenue</th>
-            </tr>
-          </thead>
+      <h6 className="fw-bold mb-2">Payment breakdown — day {clampedIndex + 1}</h6>
+      <div className="table-responsive mb-2">
+        <Table bordered className="bg-white align-middle" style={{ maxWidth: 420 }}>
           <tbody>
-            {FUEL_KEYS.map((k) => (
-              <tr key={k}>
-                <td>{FUEL_LABELS[k]}</td>
-                <td className="text-end mono">{fmt(liters[k], 0)}</td>
-                <td className="text-end mono">{fmt(revenue[k])}</td>
+            <tr className="fw-bold table-light">
+              <td>Total sale</td>
+              <td className="text-end mono">{fmt(dayPayments.totalSale)}</td>
+            </tr>
+            <tr>
+              <td>Sub</td>
+              <td className="text-end">
+                <input
+                  type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                  value={day.subsidyAmount || 0}
+                  onChange={(e) => dispatch(updateDayField({ dayIndex: clampedIndex, field: 'subsidyAmount', value: e.target.value }))}
+                />
+              </td>
+            </tr>
+            <tr>
+              <td>Shell card credit</td>
+              <td className="text-end mono text-muted">{fmt(dayPayments.card)}</td>
+            </tr>
+            <tr>
+              <td>Site credit</td>
+              <td className="text-end">
+                <input
+                  type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                  value={day.siteCredit || 0}
+                  onChange={(e) => dispatch(updateDayField({ dayIndex: clampedIndex, field: 'siteCredit', value: e.target.value }))}
+                />
+              </td>
+            </tr>
+            <tr>
+              <td>Other</td>
+              <td className="text-end">
+                <input
+                  type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                  value={day.other || 0}
+                  onChange={(e) => dispatch(updateDayField({ dayIndex: clampedIndex, field: 'other', value: e.target.value }))}
+                />
+              </td>
+            </tr>
+            <tr>
+              <td>Telephone card</td>
+              <td className="text-end">
+                <input
+                  type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                  value={day.telephoneCard || 0}
+                  onChange={(e) => dispatch(updateDayField({ dayIndex: clampedIndex, field: 'telephoneCard', value: e.target.value }))}
+                />
+              </td>
+            </tr>
+            <tr>
+              <td>Cash</td>
+              <td className="text-end mono text-muted">{fmt(dayPayments.cash)}</td>
+            </tr>
+            <tr>
+              <td>Visa card</td>
+              <td className="text-end">
+                <input
+                  type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                  value={day.visaCard || 0}
+                  onChange={(e) => dispatch(updateDayField({ dayIndex: clampedIndex, field: 'visaCard', value: e.target.value }))}
+                />
+              </td>
+            </tr>
+            <tr>
+              <td>Cash to bank</td>
+              <td className="text-end mono text-muted">{fmt(cashToBank)}</td>
+            </tr>
+          </tbody>
+        </Table>
+      </div>
+      <p className="text-muted small mb-4">
+        Total sale, Shell card credit, Cash and Cash to bank are calculated for you. Sub, Site
+        credit, Other, Telephone card and Visa card are entered by hand, same as the station's own
+        ledger — <strong>Cash</strong> is whatever's left of the Total sale once those are taken
+        out, same as counting the till.
+      </p>
+
+      <h6 className="fw-bold mb-2">Tank stock — end of day {clampedIndex + 1}</h6>
+      <div className="table-responsive">
+        <Table bordered className="bg-white align-middle" style={{ maxWidth: 420 }}>
+          <tbody>
+            {grades.map((g) => (
+              <tr key={g.key}>
+                <td className="fw-semibold">{g.name}</td>
+                <td className="text-end mono">{fmt(remaining[g.key], 0)}</td>
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr className="fw-bold table-light">
-              <td>Total</td>
-              <td className="text-end mono">{fmt(FUEL_KEYS.reduce((s, k) => s + (liters[k] || 0), 0), 0)}</td>
-              <td className="text-end mono">{fmt(grandRevenue)}</td>
-            </tr>
-          </tfoot>
         </Table>
       </div>
     </div>
