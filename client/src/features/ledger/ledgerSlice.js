@@ -13,6 +13,30 @@ function emptyDay() {
   return { date: '', entries: [] };
 }
 
+function daysInMonth(month) {
+  const [y, mo] = month.split('-').map(Number);
+  return new Date(y, mo, 0).getDate();
+}
+
+// Make sure `data.dailySales` has exactly one entry per calendar day of
+// `month`, in order — one page per day, same as the station's own Excel
+// ledger (DAY 1, DAY 2, DAY 3 … tabs). Any sales already entered are kept,
+// matched back onto their day by date; nothing is lost.
+function ensureDailySalesForMonth(data, month) {
+  if (!data || !month) return;
+  const dim = daysInMonth(month);
+  const byDate = {};
+  (data.dailySales || []).forEach((day) => {
+    if (day && day.date) byDate[day.date] = day;
+  });
+  const rebuilt = [];
+  for (let d = 1; d <= dim; d++) {
+    const date = `${month}-${String(d).padStart(2, '0')}`;
+    rebuilt.push(byDate[date] || { date, entries: [] });
+  }
+  data.dailySales = rebuilt;
+}
+
 export const fetchMonth = createAsyncThunk('ledger/fetchMonth', async (month) => {
   const res = await api.get(`/months/${month}`);
   return res.data;
@@ -147,6 +171,24 @@ const ledgerSlice = createSlice({
       state.data.cashToBank = Math.max(0, numOrZero(action.payload));
     },
 
+    // A grade's tank can be topped up more than once during the month —
+    // each delivery is its own dated entry, and all of them count toward
+    // that grade's stock (see Tank Stock tab).
+    addDelivery(state, { payload: { gradeIndex } }) {
+      const g = state.data.grades[gradeIndex];
+      if (!g) return;
+      if (!g.deliveries) g.deliveries = [];
+      g.deliveries.push({ date: '', amount: 0 });
+    },
+    updateDelivery(state, { payload: { gradeIndex, deliveryIndex, field, value } }) {
+      const d = state.data.grades[gradeIndex]?.deliveries?.[deliveryIndex];
+      if (!d) return;
+      d[field] = field === 'date' ? value : numOrZero(value);
+    },
+    deleteDelivery(state, { payload: { gradeIndex, deliveryIndex } }) {
+      state.data.grades[gradeIndex]?.deliveries?.splice(deliveryIndex, 1);
+    },
+
     addPump(state) {
       if (!state.data.pumps) state.data.pumps = [];
       const nextNo = state.data.pumps.length
@@ -179,6 +221,7 @@ const ledgerSlice = createSlice({
       .addCase(fetchMonth.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.data = action.payload;
+        ensureDailySalesForMonth(state.data, action.meta.arg);
       })
       .addCase(fetchMonth.rejected, (state, action) => {
         state.status = 'error';
@@ -227,6 +270,9 @@ export const {
   deleteExpenseRow,
   setPartners,
   setCashToBank,
+  addDelivery,
+  updateDelivery,
+  deleteDelivery,
   addPump,
   deletePump,
   updatePumpMeter,
