@@ -99,6 +99,23 @@ function prevMonthStr(month) {
   return `${yy}-${mm}`;
 }
 
+// Months saved before "deliveries" became a list stored it as a single
+// number. Mongoose would throw a cast error trying to load those documents
+// against the new array schema, so documents are read with .lean() (raw,
+// un-cast) and passed through here first. A legacy number is kept, not
+// dropped — it becomes one delivery dated the 1st of that month so the
+// total already entered isn't lost.
+function normalizeGradeDeliveries(doc) {
+  if (!doc || !Array.isArray(doc.grades)) return doc;
+  doc.grades.forEach((g) => {
+    if (!Array.isArray(g.deliveries)) {
+      const legacyAmount = typeof g.deliveries === 'number' ? g.deliveries : 0;
+      g.deliveries = legacyAmount ? [{ date: `${doc.month}-01`, amount: legacyAmount }] : [];
+    }
+  });
+  return doc;
+}
+
 // Closing stock per fuel for a saved month = opening + every delivery that
 // month (a grade can receive stock more than once) - litres sold that month.
 function computeClosingStock(doc) {
@@ -158,12 +175,17 @@ router.get('/', async (req, res) => {
 // stock (if last month exists), otherwise it starts at 0.
 router.get('/:month', async (req, res) => {
   try {
-    const existing = await MonthData.findOne({ month: req.params.month });
-    if (existing) return res.json(existing);
+    // .lean() returns the raw stored document instead of a cast/validated
+    // Mongoose document — needed so a month saved under the old
+    // (pre-array) "deliveries" format can still be read instead of
+    // crashing with a cast error.
+    const existing = await MonthData.findOne({ month: req.params.month }).lean();
+    if (existing) return res.json(normalizeGradeDeliveries(existing));
 
     const base = defaultDoc(req.params.month);
-    const prevDoc = await MonthData.findOne({ month: prevMonthStr(req.params.month) });
+    const prevDoc = await MonthData.findOne({ month: prevMonthStr(req.params.month) }).lean();
     if (prevDoc) {
+      normalizeGradeDeliveries(prevDoc);
       const closing = computeClosingStock(prevDoc);
       const prevGradesByKey = {};
       (prevDoc.grades || []).forEach((g) => { prevGradesByKey[g.key] = g; });
