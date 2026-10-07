@@ -1,8 +1,10 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Row, Col, Card, CardBody, Table } from 'reactstrap';
-import { updateGrade } from '../../features/ledger/ledgerSlice.js';
-import { stockSummary, dailyRunningStock, stockLossByGrade, stockLossTotal, fmt } from '../../utils/calc.js';
+import { Row, Col, Card, CardBody, Table, Button } from 'reactstrap';
+import { updateGrade, addDelivery, updateDelivery, deleteDelivery } from '../../features/ledger/ledgerSlice.js';
+import {
+  stockSummary, dailyRunningStock, stockLossByGrade, stockLossTotal, deliveriesTotal, fmt,
+} from '../../utils/calc.js';
 
 export default function StockTab() {
   const dispatch = useDispatch();
@@ -18,19 +20,21 @@ export default function StockTab() {
       <h4 className="mb-1">Tank stock</h4>
       <p className="text-muted small mb-3">
         Opening stock carries forward automatically from last month's closing stock when you
-        switch to a new month. Add this month's deliveries below — closing (book) stock (opening
-        + deliveries − litres sold) becomes next month's opening stock on its own.
+        switch to a new month. A grade's tank can be topped up more than once during the month —
+        add every delivery below with its date and amount, and all of them count. Closing (book)
+        stock (opening + every delivery − litres sold) becomes next month's opening stock on its own.
       </p>
 
       <Row className="g-3 mb-4">
         {grades.map((g, i) => {
           const s = summary[g.key] || { opening: 0, deliveries: 0, available: 0, sold: 0, closing: 0 };
+          const deliveries = g.deliveries || [];
           return (
-            <Col md={3} sm={6} key={g.key}>
+            <Col md={6} lg={3} key={g.key}>
               <Card className="h-100">
                 <CardBody>
                   <h6 className="fw-bold mb-3">{g.name}</h6>
-                  <div className="d-flex justify-content-between align-items-center mb-2">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
                     <small className="text-muted">Opening stock</small>
                     <input
                       type="number"
@@ -41,18 +45,56 @@ export default function StockTab() {
                       onChange={(e) => dispatch(updateGrade({ index: i, field: 'openingStock', value: e.target.value }))}
                     />
                   </div>
-                  <div className="d-flex justify-content-between align-items-center mb-2">
-                    <small className="text-muted">Deliveries this month</small>
-                    <input
-                      type="number"
-                      step="any"
-                      className="form-control form-control-sm text-end"
-                      style={{ width: 100 }}
-                      value={g.deliveries || 0}
-                      onChange={(e) => dispatch(updateGrade({ index: i, field: 'deliveries', value: e.target.value }))}
-                    />
-                  </div>
+
+                  <div className="small text-muted mb-1">Deliveries this month</div>
+                  <Table size="sm" bordered className="bg-white align-middle mb-1">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Date</th>
+                        <th className="text-end" style={{ width: 90 }}>Litres</th>
+                        <th style={{ width: 30 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deliveries.length ? deliveries.map((d, di) => (
+                        <tr key={di}>
+                          <td>
+                            <input
+                              type="date"
+                              className="form-control form-control-sm"
+                              value={d.date || ''}
+                              onChange={(e) => dispatch(updateDelivery({ gradeIndex: i, deliveryIndex: di, field: 'date', value: e.target.value }))}
+                            />
+                          </td>
+                          <td className="text-end">
+                            <input
+                              type="number" step="any" className="form-control form-control-sm text-end"
+                              value={d.amount || 0}
+                              onChange={(e) => dispatch(updateDelivery({ gradeIndex: i, deliveryIndex: di, field: 'amount', value: e.target.value }))}
+                            />
+                          </td>
+                          <td className="text-center">
+                            <Button close aria-label="Delete delivery" onClick={() => dispatch(deleteDelivery({ gradeIndex: i, deliveryIndex: di }))} />
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={3} className="text-muted small fst-italic">No deliveries added yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </Table>
+                  <Button
+                    color="primary" outline size="sm" className="mb-3"
+                    onClick={() => dispatch(addDelivery({ gradeIndex: i }))}
+                  >
+                    + Add delivery
+                  </Button>
+
                   <div className="small text-muted mt-2">
+                    Added this month: <b className="text-dark mono">{fmt(deliveriesTotal(g), 0)}</b>
+                  </div>
+                  <div className="small text-muted">
                     Available: <b className="text-dark mono">{fmt(s.available, 0)}</b>
                   </div>
                   <div className="small text-muted">
