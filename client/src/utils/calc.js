@@ -190,16 +190,15 @@ export function monthLabel(m) {
 // deliveries) — `deliveries` is a list of { date, amount } entries, and
 // every one of them counts. This sums them all.
 export function deliveriesTotal(grade) {
-  return (grade?.deliveries || []).reduce((sum, d) => sum + n(d.amount), 0);
+  const list = Array.isArray(grade?.deliveries) ? grade.deliveries : [];
+  return list.reduce((sum, d) => sum + n(d.amount), 0);
 }
 
 // Every delivery for `grade` dated on or before `dateStr` — used to work
 // out how much stock had actually arrived by a given day of the month.
 export function deliveriesThroughDate(grade, dateStr) {
-  return (grade?.deliveries || []).reduce(
-    (sum, d) => (d.date && d.date <= dateStr ? sum + n(d.amount) : sum),
-    0
-  );
+  const list = Array.isArray(grade?.deliveries) ? grade.deliveries : [];
+  return list.reduce((sum, d) => (d.date && d.date <= dateStr ? sum + n(d.amount) : sum), 0);
 }
 
 // Per-fuel stock accounting for the month:
