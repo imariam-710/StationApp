@@ -186,9 +186,26 @@ export function monthLabel(m) {
   return `${names[parseInt(mo, 10) - 1] || ''} ${y || ''}`.trim();
 }
 
+// A grade can receive fuel more than once in a month (several tanker
+// deliveries) — `deliveries` is a list of { date, amount } entries, and
+// every one of them counts. This sums them all.
+export function deliveriesTotal(grade) {
+  return (grade?.deliveries || []).reduce((sum, d) => sum + n(d.amount), 0);
+}
+
+// Every delivery for `grade` dated on or before `dateStr` — used to work
+// out how much stock had actually arrived by a given day of the month.
+export function deliveriesThroughDate(grade, dateStr) {
+  return (grade?.deliveries || []).reduce(
+    (sum, d) => (d.date && d.date <= dateStr ? sum + n(d.amount) : sum),
+    0
+  );
+}
+
 // Per-fuel stock accounting for the month:
 //   opening (carried over from last month's closing, or set manually)
-// + deliveries (new stock brought in this month, entered manually)
+// + deliveries (every delivery brought in this month, entered manually —
+//   can be more than one)
 // - sold (litres sold this month, from Daily Sales)
 // = closing (becomes next month's opening automatically)
 export function stockSummary(grades = [], dailySales = []) {
@@ -196,7 +213,7 @@ export function stockSummary(grades = [], dailySales = []) {
   const result = {};
   grades.forEach((g) => {
     const opening = n(g.openingStock);
-    const deliveries = n(g.deliveries);
+    const deliveries = deliveriesTotal(g);
     const soldQty = sold[g.key] || 0;
     result[g.key] = {
       opening,
@@ -209,6 +226,8 @@ export function stockSummary(grades = [], dailySales = []) {
   return result;
 }
 
+// Stock remaining after each day's sales — starts at opening + deliveries,
+// and drops by that day's litres sold, day by day, per fuel.
 // Litres sold per grade, derived from pump meter readings (closing minus
 // opening, summed across all pumps that dispense that fuel) — an
 // independent cross-check against the Daily Sales litres total. Purely
@@ -226,22 +245,17 @@ export function pumpLitersByGrade(pumps = []) {
   return t;
 }
 
-// Stock remaining after each day's sales — starts at opening + deliveries,
-// and drops by that day's litres sold, day by day, per fuel.
+// Stock remaining at the end of each day = opening stock, plus every
+// delivery dated on or before that day (a grade can receive fuel more than
+// once during the month — each one counts from its own date onward), minus
+// everything sold from day 1 through that day.
 export function dailyRunningStock(grades = [], dailySales = []) {
-  const running = {};
-  grades.forEach((g) => {
-    running[g.key] = n(g.openingStock) + n(g.deliveries);
-  });
-  return dailySales.map((day) => {
-    const soldToday = { super: 0, regular: 0, diesel: 0, vpower: 0 };
-    (day.entries || []).forEach((e) => {
-      if (soldToday[e.fuel] !== undefined) soldToday[e.fuel] += n(e.liters);
-    });
+  return dailySales.map((day, dayIdx) => {
     const remaining = {};
-    FUEL_KEYS.forEach((k) => {
-      running[k] = (running[k] || 0) - soldToday[k];
-      remaining[k] = running[k];
+    grades.forEach((g) => {
+      const soldThroughToday = totalLiters(dailySales.slice(0, dayIdx + 1))[g.key] || 0;
+      const deliveredThroughToday = deliveriesThroughDate(g, day.date);
+      remaining[g.key] = n(g.openingStock) + deliveredThroughToday - soldThroughToday;
     });
     return { date: day.date, remaining };
   });
