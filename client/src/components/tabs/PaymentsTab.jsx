@@ -6,17 +6,17 @@ import { PAYMENT_TYPES, totalPayments, dailyPaymentTotals, fmt } from '../../uti
 export default function PaymentsTab() {
   const grades = useSelector((s) => s.ledger.data?.grades) || [];
   const dailySales = useSelector((s) => s.ledger.data?.dailySales) || [];
-  const totals = totalPayments(dailySales, grades);
-  const byDay = dailyPaymentTotals(dailySales, grades);
+  const monthlyPumps = useSelector((s) => s.ledger.data?.pumps) || [];
+  const totals = totalPayments(dailySales, grades, monthlyPumps);
+  const byDay = dailyPaymentTotals(dailySales, grades, monthlyPumps);
 
   return (
     <div>
       <h4 className="mb-1">Payments</h4>
       <p className="text-muted small mb-3">
-        This is filled in automatically from the litres and payment method entered for each
-        sale on the <strong>Daily Sales</strong> tab — nothing to enter here. A day can have
-        several sales split across different payment methods, so this is totaled per payment
-        method rather than per fuel. (Tank stock lives on its own <strong>Tank Stock</strong> tab.)
+        This is filled in automatically from each day's payment breakdown on the{' '}
+        <strong>Daily Sales</strong> tab — nothing to enter here. (Tank stock lives on its own{' '}
+        <strong>Tank Stock</strong> tab.)
       </p>
 
       <h6 className="fw-bold mt-4 mb-2">Payment breakdown by day</h6>
