@@ -28,7 +28,7 @@ export default function StockTab() {
       <Row className="g-3 mb-4">
         {grades.map((g, i) => {
           const s = summary[g.key] || { opening: 0, deliveries: 0, available: 0, sold: 0, closing: 0 };
-          const deliveries = g.deliveries || [];
+          const deliveries = Array.isArray(g.deliveries) ? g.deliveries : [];
           return (
             <Col md={6} lg={3} key={g.key}>
               <Card className="h-100">
