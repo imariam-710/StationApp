@@ -177,7 +177,7 @@ const ledgerSlice = createSlice({
     addDelivery(state, { payload: { gradeIndex } }) {
       const g = state.data.grades[gradeIndex];
       if (!g) return;
-      if (!g.deliveries) g.deliveries = [];
+      if (!Array.isArray(g.deliveries)) g.deliveries = [];
       g.deliveries.push({ date: '', amount: 0 });
     },
     updateDelivery(state, { payload: { gradeIndex, deliveryIndex, field, value } }) {
