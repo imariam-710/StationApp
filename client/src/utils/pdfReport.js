@@ -5,7 +5,7 @@ import {
   totalLiters, totalPayments, oilProfitTotal, oilCashTotal, oilCardTotal, oilQty,
   deductionsTotal, expensesTotal, stockLossByGrade, stockLossTotal,
   cardReductionByGrade, cardReductionTotal, pumpLitersByGrade,
-  monthLabel, n, fmt,
+  cashToBankTotal, monthLabel, n, fmt,
 } from './calc.js';
 
 const NAVY = [15, 42, 68];
@@ -46,20 +46,21 @@ export function downloadMonthlySummaryPDF({ stationName, currentMonth, data }) {
   const margin = 40;
 
   const grades = data.grades || [];
-  const dailyLiters = totalLiters(data.dailySales);
+  const monthlyPumps = data.pumps || [];
+  const dailyLiters = totalLiters(data.dailySales, monthlyPumps);
   const pumpLiters = pumpLitersByGrade(data.pumps || []);
-  const revenue = revenueByGrade(data.dailySales, grades);
-  const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
-  const payments = totalPayments(data.dailySales, grades);
+  const revenue = revenueByGrade(data.dailySales, grades, monthlyPumps);
+  const profitByGrade = fuelProfitByGrade(grades, data.dailySales, monthlyPumps);
+  const payments = totalPayments(data.dailySales, grades, monthlyPumps);
   const paymentsTotal = PAYMENT_TYPES.reduce((sum, p) => sum + (payments[p.key] || 0), 0);
 
-  const fuel = fuelProfitTotal(grades, data.dailySales);
+  const fuel = fuelProfitTotal(grades, data.dailySales, monthlyPumps);
   const oil = oilProfitTotal(data.oilProducts);
   const ded = deductionsTotal(data.deductions);
   const exp = expensesTotal(data.expenses);
   const totalProfitPlusOil = fuel + oil;
-  const lossByGrade = stockLossByGrade(grades, data.dailySales);
-  const evaporationLoss = stockLossTotal(grades, data.dailySales);
+  const lossByGrade = stockLossByGrade(grades, data.dailySales, monthlyPumps);
+  const evaporationLoss = stockLossTotal(grades, data.dailySales, monthlyPumps);
   const totalLosses = ded + exp;
   const net = totalProfitPlusOil - totalLosses;
   const partners = data.partners || 1;
@@ -113,7 +114,7 @@ export function downloadMonthlySummaryPDF({ stationName, currentMonth, data }) {
     startY: y,
     margin: { left: margin, right: margin },
     head: [['Cash collected', 'Cash deposited to bank', 'Difference']],
-    body: [[fmt(payments.cash), fmt(n(data.cashToBank)), fmt(payments.cash - n(data.cashToBank))]],
+    body: [[fmt(payments.cash), fmt(cashToBankTotal(data)), fmt(payments.cash - cashToBankTotal(data))]],
     styles: { fontSize: 9, cellPadding: 5 },
     headStyles: { fillColor: NAVY },
     theme: 'grid',
@@ -284,21 +285,22 @@ export function downloadAdminReportPDF({ stationName, currentMonth, data }) {
   const margin = 40;
 
   const grades = data.grades || [];
-  const liters = totalLiters(data.dailySales);
+  const monthlyPumps = data.pumps || [];
+  const liters = totalLiters(data.dailySales, monthlyPumps);
   const pumpLiters = pumpLitersByGrade(data.pumps || []);
-  const revenue = revenueByGrade(data.dailySales, grades);
-  const buyAmount = buyAmountByGrade(grades, data.dailySales);
-  const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
+  const revenue = revenueByGrade(data.dailySales, grades, monthlyPumps);
+  const buyAmount = buyAmountByGrade(grades, data.dailySales, monthlyPumps);
+  const profitByGrade = fuelProfitByGrade(grades, data.dailySales, monthlyPumps);
 
-  const fuel = fuelProfitTotal(grades, data.dailySales);
+  const fuel = fuelProfitTotal(grades, data.dailySales, monthlyPumps);
   const oil = oilProfitTotal(data.oilProducts);
   const oilCash = oilCashTotal(data.oilProducts);
   const oilCard = oilCardTotal(data.oilProducts);
   const ded = deductionsTotal(data.deductions);
   const exp = expensesTotal(data.expenses);
   const totalProfitPlusOil = fuel + oil;
-  const lossByGrade = stockLossByGrade(grades, data.dailySales);
-  const evaporationLoss = stockLossTotal(grades, data.dailySales);
+  const lossByGrade = stockLossByGrade(grades, data.dailySales, monthlyPumps);
+  const evaporationLoss = stockLossTotal(grades, data.dailySales, monthlyPumps);
   const cardReductionByGradeMap = cardReductionByGrade(grades, data.dailySales);
   const cardReduction = cardReductionTotal(grades, data.dailySales);
   const totalLosses = ded + exp + cardReduction;
@@ -388,6 +390,7 @@ export function downloadAdminReportPDF({ stationName, currentMonth, data }) {
     y = doc.lastAutoTable.finalY + 24;
   }
 
+
   // --- Card reduction ---
   ensureSpace(100);
   sectionHeading(doc, 'Card Reduction', margin, y);
@@ -411,7 +414,6 @@ export function downloadAdminReportPDF({ stationName, currentMonth, data }) {
     theme: 'grid',
   });
   y = doc.lastAutoTable.finalY + 24;
-
   // --- Oil & lubricants ---
   ensureSpace(80);
   sectionHeading(doc, 'Oil & Lubricants', margin, y);
