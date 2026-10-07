@@ -9,8 +9,23 @@ function numOrZero(v) {
   return isNaN(x) ? 0 : x;
 }
 
+function emptyShellCardLiters() {
+  return { super: 0, regular: 0, diesel: 0, vpower: 0 };
+}
+
 function emptyDay() {
-  return { date: '', entries: [] };
+  return {
+    date: '',
+    entries: [],
+    pumps: [],
+    shellCardLiters: emptyShellCardLiters(),
+    subsidyAmount: 0,
+    siteCredit: 0,
+    other: 0,
+    telephoneCard: 0,
+    visaCard: 0,
+    cashToBank: 0,
+  };
 }
 
 function daysInMonth(month) {
@@ -18,10 +33,23 @@ function daysInMonth(month) {
   return new Date(y, mo, 0).getDate();
 }
 
+// Keep a day's pump-reading rows lined up with the month's current pump
+// list (same pump numbers, same order) — adding or removing a pump on the
+// Pump Meters tab carries through to every day's cross-check table too.
+function syncDayPumps(day, monthlyPumps) {
+  const byPumpNo = {};
+  (day.pumps || []).forEach((p) => { byPumpNo[p.pumpNo] = p; });
+  day.pumps = (monthlyPumps || []).map((mp) => {
+    const existing = byPumpNo[mp.pumpNo];
+    return existing || { pumpNo: mp.pumpNo, super: 0, regular: 0, diesel: 0, vpower: 0 };
+  });
+}
+
 // Make sure `data.dailySales` has exactly one entry per calendar day of
 // `month`, in order — one page per day, same as the station's own Excel
 // ledger (DAY 1, DAY 2, DAY 3 … tabs). Any sales already entered are kept,
-// matched back onto their day by date; nothing is lost.
+// matched back onto their day by date; nothing is lost. Each day's pump
+// cross-check rows are also kept in sync with the month's pump list.
 function ensureDailySalesForMonth(data, month) {
   if (!data || !month) return;
   const dim = daysInMonth(month);
@@ -32,9 +60,43 @@ function ensureDailySalesForMonth(data, month) {
   const rebuilt = [];
   for (let d = 1; d <= dim; d++) {
     const date = `${month}-${String(d).padStart(2, '0')}`;
-    rebuilt.push(byDate[date] || { date, entries: [] });
+    const day = byDate[date] || emptyDay();
+    day.date = date;
+    if (!Array.isArray(day.pumps)) day.pumps = [];
+    if (!day.shellCardLiters || typeof day.shellCardLiters !== 'object') {
+      day.shellCardLiters = emptyShellCardLiters();
+    }
+    FUEL_KEYS.forEach((k) => {
+      if (typeof day.shellCardLiters[k] !== 'number') day.shellCardLiters[k] = 0;
+    });
+    if (typeof day.subsidyAmount !== 'number') day.subsidyAmount = 0;
+    if (typeof day.siteCredit !== 'number') day.siteCredit = 0;
+    if (typeof day.other !== 'number') day.other = 0;
+    if (typeof day.telephoneCard !== 'number') day.telephoneCard = 0;
+    if (typeof day.visaCard !== 'number') day.visaCard = 0;
+    if (typeof day.cashToBank !== 'number') day.cashToBank = 0;
+    syncDayPumps(day, data.pumps);
+    rebuilt.push(day);
   }
   data.dailySales = rebuilt;
+}
+
+// The station has 8 pumps. If a month was saved with an extra, completely
+// untouched pump (every meter reading zero, on the Pump Meters tab and on
+// every day), drop it — nothing is lost. A pump beyond 8 that has any
+// reading entered is left alone so no data is ever deleted silently.
+const STATION_PUMP_COUNT = 8;
+function trimEmptyExtraPumps(data) {
+  if (!data || !Array.isArray(data.pumps) || data.pumps.length <= STATION_PUMP_COUNT) return;
+  const isEmptyPump = (pumpNo) => {
+    const monthly = data.pumps.find((p) => p.pumpNo === pumpNo);
+    const monthlyUsed = monthly && FUEL_KEYS.some((k) => numOrZero(monthly[k]?.opening) || numOrZero(monthly[k]?.closing));
+    if (monthlyUsed) return false;
+    return !(data.dailySales || []).some((day) =>
+      (day.pumps || []).some((p) => p.pumpNo === pumpNo && FUEL_KEYS.some((k) => numOrZero(p[k]))));
+  };
+  const keep = data.pumps.filter((p, i) => i < STATION_PUMP_COUNT || !isEmptyPump(p.pumpNo));
+  data.pumps = keep;
 }
 
 export const fetchMonth = createAsyncThunk('ledger/fetchMonth', async (month) => {
@@ -201,9 +263,11 @@ const ledgerSlice = createSlice({
         diesel: { opening: 0, closing: 0 },
         vpower: { opening: 0, closing: 0 },
       });
+      (state.data.dailySales || []).forEach((day) => syncDayPumps(day, state.data.pumps));
     },
     deletePump(state, { payload: index }) {
       state.data.pumps.splice(index, 1);
+      (state.data.dailySales || []).forEach((day) => syncDayPumps(day, state.data.pumps));
     },
     // field is 'opening' or 'closing' on a given fuel's meter for that pump.
     updatePumpMeter(state, { payload: { index, fuel, field, value } }) {
@@ -211,6 +275,30 @@ const ledgerSlice = createSlice({
       if (!pump) return;
       if (!pump[fuel]) pump[fuel] = { opening: 0, closing: 0 };
       pump[fuel][field] = numOrZero(value);
+    },
+
+    // One pump's meter reading for one specific fuel, on one specific day —
+    // the day-sheet's "PUMP NO" cross-check table.
+    updateDayPumpReading(state, { payload: { dayIndex, pumpIndex, fuel, value } }) {
+      const pump = state.data.dailySales?.[dayIndex]?.pumps?.[pumpIndex];
+      if (!pump) return;
+      pump[fuel] = numOrZero(value);
+    },
+
+    // visaCard, subsidyAmount, siteCredit, other, or telephoneCard on a
+    // specific day.
+    updateDayField(state, { payload: { dayIndex, field, value } }) {
+      const day = state.data.dailySales?.[dayIndex];
+      if (!day) return;
+      day[field] = numOrZero(value);
+    },
+
+    // Litres sold via Shell (fleet) card, for one fuel, on one specific day.
+    updateDayShellCardLiters(state, { payload: { dayIndex, fuel, value } }) {
+      const day = state.data.dailySales?.[dayIndex];
+      if (!day) return;
+      if (!day.shellCardLiters) day.shellCardLiters = emptyShellCardLiters();
+      day.shellCardLiters[fuel] = numOrZero(value);
     },
   },
   extraReducers: (builder) => {
@@ -221,6 +309,7 @@ const ledgerSlice = createSlice({
       .addCase(fetchMonth.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.data = action.payload;
+        trimEmptyExtraPumps(state.data);
         ensureDailySalesForMonth(state.data, action.meta.arg);
       })
       .addCase(fetchMonth.rejected, (state, action) => {
@@ -276,6 +365,9 @@ export const {
   addPump,
   deletePump,
   updatePumpMeter,
+  updateDayPumpReading,
+  updateDayField,
+  updateDayShellCardLiters,
 } = ledgerSlice.actions;
 
 export default ledgerSlice.reducer;
