@@ -8,10 +8,11 @@ export default function FuelMarginTab() {
   const dispatch = useDispatch();
   const grades = useSelector((s) => s.ledger.data?.grades) || [];
   const dailySales = useSelector((s) => s.ledger.data?.dailySales) || [];
-  const liters = totalLiters(dailySales);
-  const revenue = revenueByGrade(dailySales, grades);
-  const profitByGrade = fuelProfitByGrade(grades, dailySales);
-  const lossByGrade = stockLossByGrade(grades, dailySales);
+  const monthlyPumps = useSelector((s) => s.ledger.data?.pumps) || [];
+  const liters = totalLiters(dailySales, monthlyPumps);
+  const revenue = revenueByGrade(dailySales, grades, monthlyPumps);
+  const profitByGrade = fuelProfitByGrade(grades, dailySales, monthlyPumps);
+  const lossByGrade = stockLossByGrade(grades, dailySales, monthlyPumps);
 
   let sumProfit = 0;
 
@@ -50,7 +51,7 @@ export default function FuelMarginTab() {
                     />
                   </div>
                   <div className="d-flex justify-content-between align-items-center mb-2">
-                    <small className="text-muted">Selling Cash price /L</small>
+                    <small className="text-muted">Cash price /L</small>
                     <input
                       type="number"
                       step="any"
@@ -61,7 +62,7 @@ export default function FuelMarginTab() {
                     />
                   </div>
                   <div className="d-flex justify-content-between align-items-center mb-2">
-                    <small className="text-muted">Selling Card price /L</small>
+                    <small className="text-muted">Card price /L</small>
                     <input
                       type="number"
                       step="any"
