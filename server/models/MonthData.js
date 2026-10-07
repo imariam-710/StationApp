@@ -20,6 +20,13 @@ const GradeSchema = new mongoose.Schema(
     priceCash: { type: Number, default: 0 },  // selling price per litre, paid by cash
     priceCard: { type: Number, default: 0 },  // selling price per litre, paid by card
 
+    // Flat per-litre bank/network commission charged on card sales for this
+    // grade — set manually, carries forward month to month like the prices
+    // above. This is NOT priceCard minus priceCash: cash and card can (and
+    // often do) sell at the same price, and the card network's cut is a
+    // separate, fixed-per-litre fee that doesn't move with the pump price.
+    cardReductionRate: { type: Number, default: 0 },
+
     // Tank stock accounting for this fuel, this month:
     //   openingStock (carried over automatically from last month's closing
     //   stock when a new month is first opened, or set manually) + every
@@ -76,11 +83,60 @@ const SaleEntrySchema = new mongoose.Schema(
   { _id: false }
 );
 
-// One entry per calendar day — mirrors one page of the "Daily Sales" ledger.
+// One pump's meter reading for one specific day — mirrors the "PUMP NO"
+// table on the station's own day-sheet (one reading per pump per fuel, that
+// day). Litres sold per fuel, that day, is this day's total reading across
+// every pump minus the previous day's — this IS the day's litres sold (the
+// day-sheet has no separate manual litres entry).
+const DayPumpReadingSchema = new mongoose.Schema(
+  {
+    pumpNo: { type: Number, required: true },
+    super: { type: Number, default: 0 },
+    regular: { type: Number, default: 0 },
+    diesel: { type: Number, default: 0 },
+    vpower: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
+// Litres sold via Shell (fleet) card, per fuel, for one day — entered
+// manually (the day-sheet's unlabeled yellow litres row). Its value x each
+// fuel's price gives that day's "Shell card credit" amount.
+const ShellCardLitersSchema = new mongoose.Schema(
+  {
+    super: { type: Number, default: 0 },
+    regular: { type: Number, default: 0 },
+    diesel: { type: Number, default: 0 },
+    vpower: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
+// One entry per calendar day — mirrors one page of the "Daily Sales" ledger
+// exactly: pump meter readings, Shell card litres, and the day's payment
+// breakdown. `entries` is kept only so a month saved before this change
+// doesn't lose anything; it is no longer written to or read from.
 const DailySaleSchema = new mongoose.Schema(
   {
     date: String, // "YYYY-MM-DD"
     entries: [SaleEntrySchema],
+    // Each pump's meter reading that day (matches the station's own
+    // day-sheet). Litres sold per fuel = this day's total minus the
+    // previous day's — the authoritative source of litres sold, replacing
+    // the old manual sale-entry table.
+    pumps: [DayPumpReadingSchema],
+    shellCardLiters: { type: ShellCardLitersSchema, default: () => ({}) },
+    // The day-sheet's manually-filled ("yellow") payment figures. "Cash" is
+    // not stored — it's the balancing figure (Total Sale minus all of
+    // these), same as counting the till at day's end.
+    subsidyAmount: { type: Number, default: 0 }, // "sub"
+    siteCredit: { type: Number, default: 0 },    // "SITE CR"
+    other: { type: Number, default: 0 },         // "OTHER" / chitties
+    telephoneCard: { type: Number, default: 0 },
+    visaCard: { type: Number, default: 0 },
+    // Legacy: used to be a manual entry. Cash to bank is now computed
+    // (Cash minus Visa card) — kept only so an old saved month isn't lost.
+    cashToBank: { type: Number, default: 0 },
   },
   { _id: false }
 );
@@ -129,8 +185,10 @@ const MonthDataSchema = new mongoose.Schema(
     deductions: [DeductionSchema],
     expenses: [ExpenseSchema],
     partners: { type: Number, default: 2 },
-    // How much of the cash collected was deposited to the bank this month
-    // (entered manually) — shown for reconciliation on the Summary tab.
+    // Legacy: cash-to-bank used to be entered once for the whole month here.
+    // It's now entered per day on Daily Sales (DailySaleSchema.cashToBank)
+    // and summed on the Summary tab. This field is kept only so a month
+    // saved before that change doesn't lose its figure.
     cashToBank: { type: Number, default: 0 },
     pumps: [PumpSchema],
   },
