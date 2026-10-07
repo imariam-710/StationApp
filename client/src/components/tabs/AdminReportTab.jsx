@@ -1,6 +1,7 @@
 import React from 'react';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { Table, Button, Alert } from 'reactstrap';
+import { updateGrade } from '../../features/ledger/ledgerSlice.js';
 import {
   revenueByGrade, fuelProfitByGrade, fuelProfitTotal, buyAmountByGrade, totalLiters,
   oilProfitTotal, oilCashTotal, oilCardTotal, deductionsTotal, expensesTotal,
@@ -10,6 +11,7 @@ import {
 import { downloadAdminReportPDF } from '../../utils/pdfReport.js';
 
 export default function AdminReportTab() {
+  const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
   const data = useSelector((s) => s.ledger.data);
   const currentMonth = useSelector((s) => s.ledger.currentMonth);
@@ -26,19 +28,20 @@ export default function AdminReportTab() {
   if (!data) return null;
 
   const grades = data.grades || [];
-  const liters = totalLiters(data.dailySales);
+  const monthlyPumps = data.pumps || [];
+  const liters = totalLiters(data.dailySales, monthlyPumps);
   const pumpLiters = pumpLitersByGrade(data.pumps || []);
-  const revenue = revenueByGrade(data.dailySales, grades);
-  const buyAmount = buyAmountByGrade(grades, data.dailySales);
-  const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
-  const fuel = fuelProfitTotal(grades, data.dailySales);
+  const revenue = revenueByGrade(data.dailySales, grades, monthlyPumps);
+  const buyAmount = buyAmountByGrade(grades, data.dailySales, monthlyPumps);
+  const profitByGrade = fuelProfitByGrade(grades, data.dailySales, monthlyPumps);
+  const fuel = fuelProfitTotal(grades, data.dailySales, monthlyPumps);
   const oil = oilProfitTotal(data.oilProducts);
   const oilCash = oilCashTotal(data.oilProducts);
   const oilCard = oilCardTotal(data.oilProducts);
   const ded = deductionsTotal(data.deductions);
   const exp = expensesTotal(data.expenses);
-  const lossByGrade = stockLossByGrade(grades, data.dailySales);
-  const evaporationLoss = stockLossTotal(grades, data.dailySales);
+  const lossByGrade = stockLossByGrade(grades, data.dailySales, monthlyPumps);
+  const evaporationLoss = stockLossTotal(grades, data.dailySales, monthlyPumps);
   const cardReductionByGradeMap = cardReductionByGrade(grades, data.dailySales);
   const cardReduction = cardReductionTotal(grades, data.dailySales);
   const totalProfitPlusOil = fuel + oil;
@@ -176,9 +179,11 @@ export default function AdminReportTab() {
 
       <h6 className="fw-bold mb-2">Card reduction</h6>
       <p className="text-muted small mb-2">
-        Applied to litres sold via <strong>Card</strong> payment this month, per grade. Rate is
-        fully automatic — it's the card price minus the cash price for that grade (the premium
-        charged on card sales), pulled straight from <strong>Daily Sales</strong> / <strong>Fuel Margin</strong>.
+        Applied to litres sold via <strong>Card</strong> payment this month, per grade. Litres are
+        pulled automatically from <strong>Daily Sales</strong>; the rate is the bank/network's flat
+        per-litre commission for that grade — set it below. It is <strong>not</strong> the card
+        price minus the cash price (those can be, and often are, the same); it carries forward
+        month to month like the prices on <strong>Fuel Margin</strong> until you change it.
       </p>
       <div className="table-responsive mb-4">
         <Table bordered className="bg-white align-middle mb-0">
@@ -186,18 +191,24 @@ export default function AdminReportTab() {
             <tr>
               <th>Grade</th>
               <th className="text-end">Litres</th>
-              <th className="text-end">Rate (card − cash)</th>
+              <th className="text-end" style={{ width: 120 }}>Rate /L</th>
               <th className="text-end">Amount</th>
             </tr>
           </thead>
           <tbody>
-            {grades.map((g) => {
+            {grades.map((g, i) => {
               const c = cardReductionByGradeMap[g.key] || { litres: 0, rate: 0, amount: 0 };
               return (
                 <tr key={g.key}>
                   <td>{g.name}</td>
                   <td className="text-end mono">{fmt(c.litres, 0)}</td>
-                  <td className="text-end mono text-muted">{fmt(c.rate)}</td>
+                  <td className="text-end">
+                    <input
+                      type="number" step="any" className="form-control form-control-sm text-end mono"
+                      value={g.cardReductionRate || 0}
+                      onChange={(e) => dispatch(updateGrade({ index: i, field: 'cardReductionRate', value: e.target.value }))}
+                    />
+                  </td>
                   <td className="text-end mono">{fmt(c.amount)}</td>
                 </tr>
               );
