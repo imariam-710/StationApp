@@ -16,7 +16,7 @@ export default function PumpMetersTab() {
   const pumps = useSelector((s) => s.ledger.data?.pumps) || [];
   const dailySales = useSelector((s) => s.ledger.data?.dailySales) || [];
 
-  const dailyLiters = totalLiters(dailySales);
+  const dailyLiters = totalLiters(dailySales, pumps);
   const pumpLiters = pumpLitersByGrade(pumps);
 
   return (
