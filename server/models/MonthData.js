@@ -1,5 +1,17 @@
 const mongoose = require('mongoose');
 
+// One delivery of fuel added to a grade's tank during the month. A grade can
+// receive stock more than once in a month (several tanker deliveries) — each
+// one is recorded separately here and all of them count, from their own
+// date onward, toward that grade's stock.
+const StockDeliverySchema = new mongoose.Schema(
+  {
+    date: String, // "YYYY-MM-DD"
+    amount: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const GradeSchema = new mongoose.Schema(
   {
     key: String,   // super | regular | diesel | vpower
@@ -10,10 +22,11 @@ const GradeSchema = new mongoose.Schema(
 
     // Tank stock accounting for this fuel, this month:
     //   openingStock (carried over automatically from last month's closing
-    //   stock when a new month is first opened, or set manually) + deliveries
-    //   (new stock brought in, entered manually) − litres sold = closing (book) stock.
+    //   stock when a new month is first opened, or set manually) + every
+    //   delivery in `deliveries` (new stock brought in, entered manually,
+    //   can happen several times a month) − litres sold = closing (book) stock.
     openingStock: { type: Number, default: 0 },
-    deliveries: { type: Number, default: 0 },
+    deliveries: [StockDeliverySchema],
     // Physically measured stock at month end (entered manually). The gap
     // between book stock and this is treated as evaporation/leakage loss.
     actualStock: { type: Number, default: 0 },
