@@ -1,11 +1,12 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Table, Button } from 'reactstrap';
-import { setPartners, setCashToBank } from '../../features/ledger/ledgerSlice.js';
+import { setPartners } from '../../features/ledger/ledgerSlice.js';
 import {
   PAYMENT_TYPES, revenueByGrade, fuelProfitByGrade, fuelProfitTotal, totalPayments,
   oilProfitTotal, oilCashTotal, oilCardTotal, deductionsTotal, expensesTotal,
-  stockLossByGrade, stockLossTotal, stockSummary, totalLiters, pumpLitersByGrade, n, fmt, monthLabel,
+  stockLossByGrade, stockLossTotal, stockSummary, totalLiters, pumpLitersByGrade,
+  cashToBankTotal, n, fmt, monthLabel,
 } from '../../utils/calc.js';
 import { downloadMonthlySummaryPDF } from '../../utils/pdfReport.js';
 
@@ -17,17 +18,18 @@ export default function SummaryTab() {
   if (!data) return null;
 
   const grades = data.grades || [];
-  const dailyLiters = totalLiters(data.dailySales);
+  const monthlyPumps = data.pumps || [];
+  const dailyLiters = totalLiters(data.dailySales, monthlyPumps);
   const pumpLiters = pumpLitersByGrade(data.pumps || []);
-  const revenue = revenueByGrade(data.dailySales, grades);
-  const profitByGrade = fuelProfitByGrade(grades, data.dailySales);
-  const payments = totalPayments(data.dailySales, grades);
+  const revenue = revenueByGrade(data.dailySales, grades, monthlyPumps);
+  const profitByGrade = fuelProfitByGrade(grades, data.dailySales, monthlyPumps);
+  const payments = totalPayments(data.dailySales, grades, monthlyPumps);
   const paymentsTotal = PAYMENT_TYPES.reduce((sum, p) => sum + (payments[p.key] || 0), 0);
-  const cashToBank = n(data.cashToBank);
+  const cashToBank = cashToBankTotal(data);
   const cashDifference = payments.cash - cashToBank;
 
-  const tankStock = stockSummary(grades, data.dailySales);
-  const fuel = fuelProfitTotal(grades, data.dailySales);
+  const tankStock = stockSummary(grades, data.dailySales, monthlyPumps);
+  const fuel = fuelProfitTotal(grades, data.dailySales, monthlyPumps);
   const oil = oilProfitTotal(data.oilProducts);
   const oilCash = oilCashTotal(data.oilProducts);
   const oilCard = oilCardTotal(data.oilProducts);
@@ -35,8 +37,8 @@ export default function SummaryTab() {
   const exp = expensesTotal(data.expenses);
 
   const totalProfitPlusOil = fuel + oil;
-  const lossByGrade = stockLossByGrade(grades, data.dailySales);
-  const evaporationLoss = stockLossTotal(grades, data.dailySales);
+  const lossByGrade = stockLossByGrade(grades, data.dailySales, monthlyPumps);
+  const evaporationLoss = stockLossTotal(grades, data.dailySales, monthlyPumps);
   const totalLosses = ded + exp;
   const net = totalProfitPlusOil - totalLosses;
   const partners = data.partners || 1;
@@ -96,13 +98,7 @@ export default function SummaryTab() {
             </tr>
             <tr>
               <td>Cash deposited to bank</td>
-              <td className="text-end">
-                <input
-                  type="number" step="any" min={0} value={data.cashToBank || 0}
-                  className="form-control form-control-sm text-end mono"
-                  onChange={(e) => dispatch(setCashToBank(e.target.value))}
-                />
-              </td>
+              <td className="text-end mono">{fmt(cashToBank)}</td>
             </tr>
             <tr className="fw-bold table-light">
               <td>Difference (kept on hand / short)</td>
@@ -112,8 +108,10 @@ export default function SummaryTab() {
         </Table>
       </div>
       <p className="text-muted small mb-4" style={{ marginTop: -12 }}>
-        Reference only — doesn't affect profit. A positive difference is cash still on hand; a
-        negative one means more was banked than collected (or a shortfall to look into).
+        Reference only — doesn't affect profit. "Cash deposited to bank" is calculated from each
+        day's payment breakdown on <strong>Daily Sales</strong> (Cash minus Visa card), summed for
+        the month. A positive difference is cash still on hand; a negative one means more was
+        banked than collected (or a shortfall to look into).
       </p>
 
       <h6 className="fw-bold mb-2">Pump meters</h6>
