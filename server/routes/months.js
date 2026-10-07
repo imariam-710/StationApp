@@ -5,10 +5,10 @@ const MonthData = require('../models/MonthData');
 const FUEL_KEYS = ['super', 'regular', 'diesel', 'vpower'];
 
 const DEFAULT_GRADES = [
-  { key: 'super', name: 'Super', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: 0, actualStock: 0 },
-  { key: 'regular', name: 'Regular', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: 0, actualStock: 0 },
-  { key: 'diesel', name: 'Diesel', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: 0, actualStock: 0 },
-  { key: 'vpower', name: 'V-Power', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: 0, actualStock: 0 },
+  { key: 'super', name: 'Super', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
+  { key: 'regular', name: 'Regular', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
+  { key: 'diesel', name: 'Diesel', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
+  { key: 'vpower', name: 'V-Power', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
 ];
 
 // Matches the station's own "Monthly report" Excel sheet's expense list.
@@ -64,11 +64,23 @@ function emptyDay() {
   return { date: '', entries: [] };
 }
 
+// One Daily Sales "page" per calendar day of the month — mirrors the
+// station's own Excel ledger, which has one sheet tab per day (DAY 1, DAY 2, …).
+function buildMonthDays(month) {
+  const [y, mo] = month.split('-').map(Number);
+  const dim = new Date(y, mo, 0).getDate();
+  const days = [];
+  for (let d = 1; d <= dim; d++) {
+    days.push({ date: `${month}-${String(d).padStart(2, '0')}`, entries: [] });
+  }
+  return days;
+}
+
 function defaultDoc(month) {
   return {
     month,
-    grades: DEFAULT_GRADES.map((g) => ({ ...g })),
-    dailySales: [emptyDay()],
+    grades: DEFAULT_GRADES.map((g) => ({ ...g, deliveries: [] })),
+    dailySales: buildMonthDays(month),
     oilProducts: DEFAULT_OIL_PRODUCTS.map((p) => ({ ...p })),
     deductions: DEFAULT_DEDUCTIONS,
     expenses: DEFAULT_EXPENSES,
@@ -87,7 +99,8 @@ function prevMonthStr(month) {
   return `${yy}-${mm}`;
 }
 
-// Closing stock per fuel for a saved month = opening + deliveries - litres sold that month.
+// Closing stock per fuel for a saved month = opening + every delivery that
+// month (a grade can receive stock more than once) - litres sold that month.
 function computeClosingStock(doc) {
   const sold = { super: 0, regular: 0, diesel: 0, vpower: 0 };
   (doc.dailySales || []).forEach((day) => {
@@ -97,7 +110,8 @@ function computeClosingStock(doc) {
   });
   const closing = {};
   (doc.grades || []).forEach((g) => {
-    closing[g.key] = (g.openingStock || 0) + (g.deliveries || 0) - (sold[g.key] || 0);
+    const deliveredTotal = (g.deliveries || []).reduce((sum, d) => sum + (d.amount || 0), 0);
+    closing[g.key] = (g.openingStock || 0) + deliveredTotal - (sold[g.key] || 0);
   });
   return closing;
 }
