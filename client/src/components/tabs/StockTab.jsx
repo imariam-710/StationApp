@@ -10,10 +10,11 @@ export default function StockTab() {
   const dispatch = useDispatch();
   const grades = useSelector((s) => s.ledger.data?.grades) || [];
   const dailySales = useSelector((s) => s.ledger.data?.dailySales) || [];
-  const summary = stockSummary(grades, dailySales);
-  const running = dailyRunningStock(grades, dailySales);
-  const loss = stockLossByGrade(grades, dailySales);
-  const lossTotal = stockLossTotal(grades, dailySales);
+  const monthlyPumps = useSelector((s) => s.ledger.data?.pumps) || [];
+  const summary = stockSummary(grades, dailySales, monthlyPumps);
+  const running = dailyRunningStock(grades, dailySales, monthlyPumps);
+  const loss = stockLossByGrade(grades, dailySales, monthlyPumps);
+  const lossTotal = stockLossTotal(grades, dailySales, monthlyPumps);
 
   return (
     <div>
