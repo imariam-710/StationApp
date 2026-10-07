@@ -5,7 +5,7 @@ import { setPartners, setCashToBank } from '../../features/ledger/ledgerSlice.js
 import {
   PAYMENT_TYPES, revenueByGrade, fuelProfitByGrade, fuelProfitTotal, totalPayments,
   oilProfitTotal, oilCashTotal, oilCardTotal, deductionsTotal, expensesTotal,
-  stockLossByGrade, stockLossTotal, totalLiters, pumpLitersByGrade, n, fmt, monthLabel,
+  stockLossByGrade, stockLossTotal, stockSummary, totalLiters, pumpLitersByGrade, n, fmt, monthLabel,
 } from '../../utils/calc.js';
 import { downloadMonthlySummaryPDF } from '../../utils/pdfReport.js';
 
@@ -26,6 +26,7 @@ export default function SummaryTab() {
   const cashToBank = n(data.cashToBank);
   const cashDifference = payments.cash - cashToBank;
 
+  const tankStock = stockSummary(grades, data.dailySales);
   const fuel = fuelProfitTotal(grades, data.dailySales);
   const oil = oilProfitTotal(data.oilProducts);
   const oilCash = oilCashTotal(data.oilProducts);
@@ -247,6 +248,44 @@ export default function SummaryTab() {
               <td className="text-end mono">{fmt(exp)}</td>
             </tr>
           </tfoot>
+        </Table>
+      </div>
+
+      <h6 className="fw-bold mb-2">Tank stock — closing position</h6>
+      <div className="table-responsive mb-4">
+        <Table bordered className="bg-white align-middle mb-0">
+          <thead className="table-light">
+            <tr>
+              <th></th>
+              {grades.map((g) => <th key={g.key} className="text-end">{g.name}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="fw-semibold">Opening stock</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(tankStock[g.key]?.opening, 0)}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="fw-semibold">Added (deliveries)</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(tankStock[g.key]?.deliveries, 0)}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="fw-semibold">Sold this month</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(tankStock[g.key]?.sold, 0)}</td>
+              ))}
+            </tr>
+            <tr className="fw-bold table-light">
+              <td>Closing stock</td>
+              {grades.map((g) => (
+                <td key={g.key} className="text-end mono">{fmt(tankStock[g.key]?.closing, 0)}</td>
+              ))}
+            </tr>
+          </tbody>
         </Table>
       </div>
 
