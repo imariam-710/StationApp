@@ -5,10 +5,10 @@ const MonthData = require('../models/MonthData');
 const FUEL_KEYS = ['super', 'regular', 'diesel', 'vpower'];
 
 const DEFAULT_GRADES = [
-  { key: 'super', name: 'Super', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
-  { key: 'regular', name: 'Regular', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
-  { key: 'diesel', name: 'Diesel', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
-  { key: 'vpower', name: 'V-Power', buy: 0, priceCash: 0, priceCard: 0, openingStock: 0, deliveries: [], actualStock: 0 },
+  { key: 'super', name: 'Super', buy: 0, priceCash: 0, priceCard: 0, cardReductionRate: 0, openingStock: 0, deliveries: [], actualStock: 0 },
+  { key: 'regular', name: 'Regular', buy: 0, priceCash: 0, priceCard: 0, cardReductionRate: 0, openingStock: 0, deliveries: [], actualStock: 0 },
+  { key: 'diesel', name: 'Diesel', buy: 0, priceCash: 0, priceCard: 0, cardReductionRate: 0, openingStock: 0, deliveries: [], actualStock: 0 },
+  { key: 'vpower', name: 'V-Power', buy: 0, priceCash: 0, priceCard: 0, cardReductionRate: 0, openingStock: 0, deliveries: [], actualStock: 0 },
 ];
 
 // Matches the station's own "Monthly report" Excel sheet's expense list.
@@ -60,33 +60,66 @@ function defaultPumps() {
   }));
 }
 
+function emptyShellCardLiters() {
+  return { super: 0, regular: 0, diesel: 0, vpower: 0 };
+}
+
 function emptyDay() {
-  return { date: '', entries: [] };
+  return {
+    date: '',
+    entries: [],
+    pumps: [],
+    shellCardLiters: emptyShellCardLiters(),
+    subsidyAmount: 0,
+    siteCredit: 0,
+    other: 0,
+    telephoneCard: 0,
+    visaCard: 0,
+    cashToBank: 0,
+  };
+}
+
+// One row per pump in that day's pump-reading cross-check table, matching
+// whichever pump numbers the month currently has.
+function defaultDayPumps(pumps) {
+  return (pumps || []).map((p) => ({ pumpNo: p.pumpNo, super: 0, regular: 0, diesel: 0, vpower: 0 }));
 }
 
 // One Daily Sales "page" per calendar day of the month — mirrors the
 // station's own Excel ledger, which has one sheet tab per day (DAY 1, DAY 2, …).
-function buildMonthDays(month) {
+function buildMonthDays(month, pumps) {
   const [y, mo] = month.split('-').map(Number);
   const dim = new Date(y, mo, 0).getDate();
   const days = [];
   for (let d = 1; d <= dim; d++) {
-    days.push({ date: `${month}-${String(d).padStart(2, '0')}`, entries: [] });
+    days.push({
+      date: `${month}-${String(d).padStart(2, '0')}`,
+      entries: [],
+      pumps: defaultDayPumps(pumps),
+      shellCardLiters: emptyShellCardLiters(),
+      subsidyAmount: 0,
+      siteCredit: 0,
+      other: 0,
+      telephoneCard: 0,
+      visaCard: 0,
+      cashToBank: 0,
+    });
   }
   return days;
 }
 
 function defaultDoc(month) {
+  const pumps = defaultPumps();
   return {
     month,
     grades: DEFAULT_GRADES.map((g) => ({ ...g, deliveries: [] })),
-    dailySales: buildMonthDays(month),
+    dailySales: buildMonthDays(month, pumps),
     oilProducts: DEFAULT_OIL_PRODUCTS.map((p) => ({ ...p })),
     deductions: DEFAULT_DEDUCTIONS,
     expenses: DEFAULT_EXPENSES,
     partners: 2,
     cashToBank: 0,
-    pumps: defaultPumps(),
+    pumps,
   };
 }
 
@@ -116,15 +149,36 @@ function normalizeGradeDeliveries(doc) {
   return doc;
 }
 
+// Litres sold per fuel for a saved month, derived from the day-sheet pump
+// meter readings (replaces the old per-sale "entries" source). Meters only
+// ever go up, so the total sold so far this month is simply the HIGHEST
+// day-total reached minus the month's opening reading — this stays correct
+// even midway through a month, when the remaining days are still blank
+// (reading 0), unlike summing day-to-day differences, which would wrongly
+// subtract once the readings drop back to 0 on a not-yet-filled-in day.
+function monthSoldByFuel(doc) {
+  const opening = { super: 0, regular: 0, diesel: 0, vpower: 0 };
+  (doc.pumps || []).forEach((p) => {
+    FUEL_KEYS.forEach((k) => { opening[k] += (p[k] && p[k].opening) || 0; });
+  });
+  const highest = { ...opening };
+  (doc.dailySales || []).forEach((day) => {
+    (day.pumps || []).forEach((p) => {
+      FUEL_KEYS.forEach((k) => {
+        const v = p[k] || 0;
+        if (v > highest[k]) highest[k] = v;
+      });
+    });
+  });
+  const sold = {};
+  FUEL_KEYS.forEach((k) => { sold[k] = highest[k] - opening[k]; });
+  return sold;
+}
+
 // Closing stock per fuel for a saved month = opening + every delivery that
 // month (a grade can receive stock more than once) - litres sold that month.
 function computeClosingStock(doc) {
-  const sold = { super: 0, regular: 0, diesel: 0, vpower: 0 };
-  (doc.dailySales || []).forEach((day) => {
-    (day.entries || []).forEach((e) => {
-      if (sold[e.fuel] !== undefined) sold[e.fuel] += e.liters || 0;
-    });
-  });
+  const sold = monthSoldByFuel(doc);
   const closing = {};
   (doc.grades || []).forEach((g) => {
     const deliveredTotal = (g.deliveries || []).reduce((sum, d) => sum + (d.amount || 0), 0);
@@ -195,11 +249,13 @@ router.get('/:month', async (req, res) => {
         return {
           ...g,
           openingStock: closing[g.key] || 0,
-          // Prices carry forward from last month and stay fixed until the
-          // user changes them — they do NOT reset to 0 every month.
+          // Prices and the card reduction rate carry forward from last
+          // month and stay fixed until the user changes them — they do NOT
+          // reset to 0 every month.
           buy: prevGrade ? prevGrade.buy : g.buy,
           priceCash: prevGrade ? prevGrade.priceCash : g.priceCash,
           priceCard: prevGrade ? prevGrade.priceCard : g.priceCard,
+          cardReductionRate: prevGrade ? (prevGrade.cardReductionRate || 0) : g.cardReductionRate,
         };
       });
 
