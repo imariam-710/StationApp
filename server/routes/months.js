@@ -235,6 +235,33 @@ function computePumpClosingReadings(doc) {
   return closing;
 }
 
+// Day 1 of a month measures its litres sold against the last meter reading
+// of the previous month (the Excel ledger links day 1 to last month's final
+// day). If any pump/fuel has no opening reading yet, fill it in from the
+// most recent earlier month that has meter readings (looking back up to 6
+// months, so a skipped month doesn't break the chain). A reading already
+// entered is never overwritten.
+async function fillOpeningFromEarlierMonths(doc) {
+  if (!doc || !Array.isArray(doc.pumps)) return doc;
+  const needs = () => doc.pumps.some((p) => FUEL_KEYS.some((k) => !(p[k] && p[k].opening)));
+  if (!needs()) return doc;
+  let month = doc.month;
+  for (let i = 0; i < 6 && needs(); i++) {
+    month = prevMonthStr(month);
+    const prev = await MonthData.findOne({ month }).lean();
+    if (!prev) continue;
+    const closing = computePumpClosingReadings(prev);
+    doc.pumps.forEach((p) => {
+      const c = closing[p.pumpNo];
+      if (!c) return;
+      FUEL_KEYS.forEach((k) => {
+        if (!(p[k] && p[k].opening) && c[k] > 0) p[k] = { ...(p[k] || {}), opening: c[k], closing: (p[k] && p[k].closing) || 0 };
+      });
+    });
+  }
+  return doc;
+}
+
 // GET /api/months -> list of months that have saved data, oldest first
 router.get('/', async (req, res) => {
   try {
@@ -255,7 +282,7 @@ router.get('/:month', async (req, res) => {
     // (pre-array) "deliveries" format can still be read instead of
     // crashing with a cast error.
     const existing = await MonthData.findOne({ month: req.params.month }).lean();
-    if (existing) return res.json(normalizeGradeDeliveries(existing));
+    if (existing) return res.json(await fillOpeningFromEarlierMonths(normalizeGradeDeliveries(existing)));
 
     const base = defaultDoc(req.params.month);
     const prevDoc = await MonthData.findOne({ month: prevMonthStr(req.params.month) }).lean();
@@ -299,7 +326,7 @@ router.get('/:month', async (req, res) => {
         };
       });
     }
-    res.json(base);
+    res.json(await fillOpeningFromEarlierMonths(base));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
