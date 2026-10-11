@@ -22,8 +22,9 @@ export default function StockTab() {
       <p className="text-muted small mb-3">
         Opening stock carries forward automatically from last month's closing stock when you
         switch to a new month. A grade's tank can be topped up more than once during the month —
-        add every delivery below with its date and amount, and all of them count. Closing (book)
-        stock (opening + every delivery − litres sold) becomes next month's opening stock on its own.
+        add every delivery below with its date and amount, and all of them count. Next month's
+        opening stock is carried over on its own: the actual stock you measure at month end, or —
+        if you leave that blank — the book stock (opening + every delivery − litres sold).
       </p>
 
       <Row className="g-3 mb-4">
