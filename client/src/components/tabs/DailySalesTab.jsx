@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Table, Button } from 'reactstrap';
 import {
-  updateDayPumpReading, updateDayShellCardLiters, updateDayField,
+  updateDayPumpReading, updateDayShellCardLiters, updateDayPumpTestLiters, updateDayField,
 } from '../../features/ledger/ledgerSlice.js';
 import {
-  FUEL_KEYS, dailyPumpSalesLiters, dailyPaymentTotals, dailyRunningStock, n, fmt,
+  FUEL_KEYS, dayCashToBank, dailyPumpSalesLiters, dailyPaymentTotals, dailyRunningStock, fuelsMissingOpening, n, fmt,
 } from '../../utils/calc.js';
 
 const FUEL_LABELS = {
@@ -64,6 +64,7 @@ export default function DailySalesTab() {
   };
   const dayPumps = day.pumps || [];
   const shellCardLiters = day.shellCardLiters || {};
+  const pumpTestLiters = day.pumpTestLiters || {};
   const isToday = currentMonth === todayMonthStr() && day.date === todayDateStr();
 
   const priceByFuel = {};
@@ -78,10 +79,12 @@ export default function DailySalesTab() {
   const dayPayments = dailyPaymentTotals(dailySales, grades, monthlyPumps)[clampedIndex] || {
     cash: 0, card: 0, subsidy: 0, siteCredit: 0, chitties: 0, telephoneCard: 0, totalSale: 0,
   };
-  const cashToBank = Math.max(dayPayments.cash - n(day.visaCard), 0);
+  const cashToBank = dayCashToBank(day, dayPayments);
 
   const running = dailyRunningStock(grades, dailySales, monthlyPumps);
   const remaining = running[clampedIndex]?.remaining || {};
+
+  const missingOpening = fuelsMissingOpening(dailySales, monthlyPumps);
 
   const goTo = (idx) => setDayIndex(Math.min(Math.max(idx, 0), lastIndex));
 
@@ -125,6 +128,15 @@ export default function DailySalesTab() {
       <h5 className="mb-2">
         Day {clampedIndex + 1} — {dayLabel(day.date)}{isToday && <span className="badge bg-success ms-2">Today</span>}
       </h5>
+
+      {missingOpening.length > 0 && (
+        <div className="alert alert-warning py-2 small">
+          Opening meter readings aren't entered for {missingOpening.map((k) => FUEL_LABELS[k]).join(', ')}.
+          Day 1's Sales Lt. can't be worked out until they are — enter each pump's opening
+          reading (the last day of last month's meter reading) on the <strong>Pump Meters</strong> tab.
+          Until then, sales for that fuel start counting from day 2.
+        </div>
+      )}
 
       <div className="table-responsive mb-0">
         <Table bordered className="bg-white align-middle mb-0">
@@ -179,12 +191,25 @@ export default function DailySalesTab() {
                 </td>
               ))}
             </tr>
+            <tr>
+              <td className="fw-semibold">Pump test (Lt.)</td>
+              {FUEL_KEYS.map((k) => (
+                <td key={k} className="text-end">
+                  <input
+                    type="number" step="any" className="form-control form-control-sm text-end bg-warning-subtle"
+                    value={pumpTestLiters[k] || 0}
+                    onChange={(e) => dispatch(updateDayPumpTestLiters({ dayIndex: clampedIndex, fuel: k, value: e.target.value }))}
+                  />
+                </td>
+              ))}
+            </tr>
           </tbody>
         </Table>
       </div>
       <p className="text-muted small mb-4">
         Enter each pump's meter reading per fuel — Total, Sales Lt. and Amount are calculated for
-        you. Shell card (Lt.) is the litres sold via Shell fleet card this day, entered by hand.
+        you. Shell card (Lt.) is the litres sold via Shell fleet card this day, and Pump test (Lt.) is
+        fuel run through a pump for testing and poured back — both entered by hand.
       </p>
 
       <h6 className="fw-bold mb-2">Payment breakdown — day {clampedIndex + 1}</h6>
@@ -254,6 +279,10 @@ export default function DailySalesTab() {
               </td>
             </tr>
             <tr>
+              <td>Pump test</td>
+              <td className="text-end mono text-muted">{fmt(dayPayments.pumpTest)}</td>
+            </tr>
+            <tr>
               <td>Cash to bank</td>
               <td className="text-end mono text-muted">{fmt(cashToBank)}</td>
             </tr>
@@ -261,9 +290,9 @@ export default function DailySalesTab() {
         </Table>
       </div>
       <p className="text-muted small mb-4">
-        Total sale, Shell card credit, Cash and Cash to bank are calculated for you. Sub, Site
+        Total sale, Shell card credit, Cash, Pump test and Cash to bank are calculated for you. Sub, Site
         credit, Other, Telephone card and Visa card are entered by hand, same as the station's own
-        ledger — <strong>Cash</strong> is whatever's left of the Total sale once those are taken
+        ledger. <strong>Cash to bank</strong> = Cash − Visa card − Pump test (test litres show on the meter but bring in no money). <strong>Cash</strong> is whatever's left of the Total sale once those are taken
         out, same as counting the till.
       </p>
 
