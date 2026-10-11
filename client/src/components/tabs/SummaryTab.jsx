@@ -109,7 +109,7 @@ export default function SummaryTab() {
       </div>
       <p className="text-muted small mb-4" style={{ marginTop: -12 }}>
         Reference only — doesn't affect profit. "Cash deposited to bank" is calculated from each
-        day's payment breakdown on <strong>Daily Sales</strong> (Cash minus Visa card), summed for
+        day's payment breakdown on <strong>Daily Sales</strong> (Cash minus Visa card minus pump test), summed for
         the month. A positive difference is cash still on hand; a negative one means more was
         banked than collected (or a shortfall to look into).
       </p>
