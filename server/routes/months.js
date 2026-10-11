@@ -70,6 +70,7 @@ function emptyDay() {
     entries: [],
     pumps: [],
     shellCardLiters: emptyShellCardLiters(),
+    pumpTestLiters: emptyShellCardLiters(),
     subsidyAmount: 0,
     siteCredit: 0,
     other: 0,
@@ -97,6 +98,7 @@ function buildMonthDays(month, pumps) {
       entries: [],
       pumps: defaultDayPumps(pumps),
       shellCardLiters: emptyShellCardLiters(),
+      pumpTestLiters: emptyShellCardLiters(),
       subsidyAmount: 0,
       siteCredit: 0,
       other: 0,
@@ -210,6 +212,20 @@ function computePumpClosingReadings(doc) {
       diesel: p.diesel?.closing || 0,
       vpower: p.vpower?.closing || 0,
     };
+  });
+  // The Pump Meters tab's month-end "closing" is often left blank now that
+  // meter readings are entered every day on Daily Sales. For any pump/fuel
+  // without a closing figure, use the latest day-sheet reading instead, so
+  // next month's opening reading carries over automatically.
+  (doc.dailySales || []).forEach((day) => {
+    (day.pumps || []).forEach((dp) => {
+      const c = closing[dp.pumpNo] || (closing[dp.pumpNo] = { super: 0, regular: 0, diesel: 0, vpower: 0 });
+      const manual = (doc.pumps || []).find((p) => p.pumpNo === dp.pumpNo);
+      FUEL_KEYS.forEach((k) => {
+        const manualClosing = manual && manual[k] && manual[k].closing;
+        if (!manualClosing && (dp[k] || 0) > 0) c[k] = dp[k];
+      });
+    });
   });
   return closing;
 }
