@@ -126,6 +126,10 @@ const DailySaleSchema = new mongoose.Schema(
     // the old manual sale-entry table.
     pumps: [DayPumpReadingSchema],
     shellCardLiters: { type: ShellCardLitersSchema, default: () => ({}) },
+    // Litres run through a pump for calibration testing and poured back into
+    // the tank — they show on the meter but earn no money, so their value is
+    // taken off the cash banked (the red "Pump test" note on the paper sheet).
+    pumpTestLiters: { type: ShellCardLitersSchema, default: () => ({}) },
     // The day-sheet's manually-filled ("yellow") payment figures. "Cash" is
     // not stored — it's the balancing figure (Total Sale minus all of
     // these), same as counting the till at day's end.
