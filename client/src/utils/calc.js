@@ -37,12 +37,36 @@ export function priceForEntry(prices, fuel, paymentType) {
 
 // Opening pump-meter reading totals per fuel, summed across every pump —
 // the baseline day 1 of the month is measured against.
-function pumpOpeningTotals(monthlyPumps = []) {
+function rawOpeningTotals(monthlyPumps = []) {
   const t = { super: 0, regular: 0, diesel: 0, vpower: 0 };
   monthlyPumps.forEach((p) => {
     FUEL_KEYS.forEach((k) => { t[k] += n(p[k]?.opening); });
   });
   return t;
+}
+
+// The baseline day 1 is measured against. Normally the opening readings
+// from the Pump Meters tab. If a fuel's opening reading was never entered
+// (0), the first day with a reading is used as the baseline instead, so a
+// missing opening reading can't make the whole meter total count as "sold"
+// — that fuel's sales simply start counting from the day after, until the
+// opening reading is entered.
+function pumpOpeningTotals(monthlyPumps = [], dailySales = []) {
+  const t = rawOpeningTotals(monthlyPumps);
+  FUEL_KEYS.forEach((k) => {
+    if (t[k] > 0) return;
+    const first = dailySales.map((d) => dayPumpTotalsByGrade(d)[k]).find((v) => v > 0);
+    t[k] = first || 0;
+  });
+  return t;
+}
+
+// Fuels that have meter readings entered but no opening reading on the
+// Pump Meters tab — their first day's litres can't be worked out until it
+// is entered.
+export function fuelsMissingOpening(dailySales = [], monthlyPumps = []) {
+  const raw = rawOpeningTotals(monthlyPumps);
+  return FUEL_KEYS.filter((k) => raw[k] <= 0 && dailySales.some((d) => dayPumpTotalsByGrade(d)[k] > 0));
 }
 
 // Litres sold per grade, for the whole month so far, derived from the
@@ -54,7 +78,7 @@ function pumpOpeningTotals(monthlyPumps = []) {
 // differences instead would wrongly subtract once the readings drop back to
 // 0 on a not-yet-filled-in day.
 export function totalLiters(dailySales = [], monthlyPumps = []) {
-  const opening = pumpOpeningTotals(monthlyPumps);
+  const opening = pumpOpeningTotals(monthlyPumps, dailySales);
   const highest = { ...opening };
   dailySales.forEach((day) => {
     const t = dayPumpTotalsByGrade(day);
@@ -99,6 +123,10 @@ export function dailyPaymentTotals(dailySales = [], grades = [], monthlyPumps = 
     let card = 0;
     FUEL_KEYS.forEach((k) => { card += n(shellCardLiters[k]) * (priceByFuel[k] || 0); });
 
+    const pumpTestLiters = day.pumpTestLiters || {};
+    let pumpTest = 0;
+    FUEL_KEYS.forEach((k) => { pumpTest += n(pumpTestLiters[k]) * (priceByFuel[k] || 0); });
+
     const subsidy = n(day.subsidyAmount);
     const cash = Math.max(totalSale - card - subsidy, 0);
 
@@ -106,7 +134,7 @@ export function dailyPaymentTotals(dailySales = [], grades = [], monthlyPumps = 
     const chitties = n(day.other);
     const telephoneCard = n(day.telephoneCard);
 
-    return { date: day.date, cash, card, subsidy, siteCredit, chitties, telephoneCard, totalSale };
+    return { date: day.date, cash, card, subsidy, siteCredit, chitties, telephoneCard, totalSale, pumpTest };
   });
 }
 
@@ -280,7 +308,7 @@ export function pumpLitersByGrade(pumps = []) {
 // same highest-reading-so-far method as totalLiters, so it's unaffected by
 // the remaining (blank) days later in the month.
 export function dailyRunningStock(grades = [], dailySales = [], monthlyPumps = []) {
-  const opening = pumpOpeningTotals(monthlyPumps);
+  const opening = pumpOpeningTotals(monthlyPumps, dailySales);
   const highest = { ...opening };
   return dailySales.map((day) => {
     const today = dayPumpTotalsByGrade(day);
@@ -382,7 +410,7 @@ export function dayPumpTotalsByGrade(day) {
 // totalLiters, which isn't thrown off by days later in the month still
 // being blank.
 export function dailyPumpSalesLiters(dailySales = [], monthlyPumps = []) {
-  const opening = pumpOpeningTotals(monthlyPumps);
+  const opening = pumpOpeningTotals(monthlyPumps, dailySales);
   let prev = opening;
   return dailySales.map((day) => {
     const today = dayPumpTotalsByGrade(day);
@@ -395,15 +423,19 @@ export function dailyPumpSalesLiters(dailySales = [], monthlyPumps = []) {
   });
 }
 
-// Cash deposited to the bank, for the whole month — each day's Cash (the
-// payment-breakdown balancing figure) minus that day's Visa card, summed.
+// Cash deposited to the bank, for one day: Cash (the balancing figure) minus
+// Visa card minus the value of pump-test litres (metered but earned no cash).
+export function dayCashToBank(day, payment) {
+  return Math.max((payment?.cash || 0) - n(day?.visaCard) - (payment?.pumpTest || 0), 0);
+}
+
+// Cash deposited to the bank, for the whole month — each day's figure above, summed.
 export function cashToBankTotal(data) {
   const grades = data?.grades || [];
   const dailySales = data?.dailySales || [];
   const monthlyPumps = data?.pumps || [];
   const payments = dailyPaymentTotals(dailySales, grades, monthlyPumps);
   return dailySales.reduce((sum, day, i) => {
-    const cash = payments[i]?.cash || 0;
-    return sum + Math.max(cash - n(day.visaCard), 0);
+    return sum + dayCashToBank(day, payments[i]);
   }, 0);
 }
