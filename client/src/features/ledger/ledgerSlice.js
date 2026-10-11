@@ -19,6 +19,7 @@ function emptyDay() {
     entries: [],
     pumps: [],
     shellCardLiters: emptyShellCardLiters(),
+    pumpTestLiters: emptyShellCardLiters(),
     subsidyAmount: 0,
     siteCredit: 0,
     other: 0,
@@ -68,6 +69,12 @@ function ensureDailySalesForMonth(data, month) {
     }
     FUEL_KEYS.forEach((k) => {
       if (typeof day.shellCardLiters[k] !== 'number') day.shellCardLiters[k] = 0;
+    });
+    if (!day.pumpTestLiters || typeof day.pumpTestLiters !== 'object') {
+      day.pumpTestLiters = emptyShellCardLiters();
+    }
+    FUEL_KEYS.forEach((k) => {
+      if (typeof day.pumpTestLiters[k] !== 'number') day.pumpTestLiters[k] = 0;
     });
     if (typeof day.subsidyAmount !== 'number') day.subsidyAmount = 0;
     if (typeof day.siteCredit !== 'number') day.siteCredit = 0;
@@ -316,6 +323,15 @@ const ledgerSlice = createSlice({
       if (!day.shellCardLiters) day.shellCardLiters = emptyShellCardLiters();
       day.shellCardLiters[fuel] = numOrZero(value);
     },
+
+    // Litres used for pump testing (poured back into the tank), for one
+    // fuel, on one specific day.
+    updateDayPumpTestLiters(state, { payload: { dayIndex, fuel, value } }) {
+      const day = state.data.dailySales?.[dayIndex];
+      if (!day) return;
+      if (!day.pumpTestLiters) day.pumpTestLiters = emptyShellCardLiters();
+      day.pumpTestLiters[fuel] = numOrZero(value);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -384,6 +400,7 @@ export const {
   updateDayPumpReading,
   updateDayField,
   updateDayShellCardLiters,
+  updateDayPumpTestLiters,
 } = ledgerSlice.actions;
 
 export default ledgerSlice.reducer;
