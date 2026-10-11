@@ -177,14 +177,19 @@ function monthSoldByFuel(doc) {
   return sold;
 }
 
-// Closing stock per fuel for a saved month = opening + every delivery that
-// month (a grade can receive stock more than once) - litres sold that month.
+// Closing stock per fuel for a saved month = the actual measured stock if
+// entered, otherwise opening + every delivery that month - litres sold.
 function computeClosingStock(doc) {
   const sold = monthSoldByFuel(doc);
   const closing = {};
   (doc.grades || []).forEach((g) => {
     const deliveredTotal = (g.deliveries || []).reduce((sum, d) => sum + (d.amount || 0), 0);
-    closing[g.key] = (g.openingStock || 0) + deliveredTotal - (sold[g.key] || 0);
+    const book = (g.openingStock || 0) + deliveredTotal - (sold[g.key] || 0);
+    // The station's own ledger starts next month from the stock actually
+    // measured in the tank, not the calculated (book) figure — otherwise a
+    // loss already charged this month would be charged again next month.
+    // If no actual stock was entered, fall back to the book figure.
+    closing[g.key] = (g.actualStock || 0) > 0 ? g.actualStock : book;
   });
   return closing;
 }
