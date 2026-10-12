@@ -246,11 +246,15 @@ async function fillOpeningFromEarlierMonths(doc) {
   const needs = () => doc.pumps.some((p) => FUEL_KEYS.some((k) => !(p[k] && p[k].opening)));
   if (!needs()) return doc;
   let month = doc.month;
-  for (let i = 0; i < 6 && needs(); i++) {
+  for (let i = 0; i < 6; i++) {
     month = prevMonthStr(month);
     const prev = await MonthData.findOne({ month }).lean();
     if (!prev) continue;
     const closing = computePumpClosingReadings(prev);
+    const hasReadings = Object.values(closing).some((c) => FUEL_KEYS.some((k) => c[k] > 0));
+    if (!hasReadings) continue;
+    // Use ONE month only — the most recent one that has readings — so the
+    // openings never get mixed together from different months.
     doc.pumps.forEach((p) => {
       const c = closing[p.pumpNo];
       if (!c) return;
@@ -258,6 +262,7 @@ async function fillOpeningFromEarlierMonths(doc) {
         if (!(p[k] && p[k].opening) && c[k] > 0) p[k] = { ...(p[k] || {}), opening: c[k], closing: (p[k] && p[k].closing) || 0 };
       });
     });
+    break;
   }
   return doc;
 }
