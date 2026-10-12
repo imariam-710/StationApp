@@ -417,10 +417,19 @@ export function dailyPumpSalesLiters(dailySales = [], monthlyPumps = []) {
   return dailySales.map((day) => {
     const today = dayPumpTotalsByGrade(day);
     const liters = {};
+    const nextPrev = { ...prev };
     FUEL_KEYS.forEach((k) => {
-      liters[k] = today[k] - prev[k];
+      // A fuel with no meter reading entered yet (total 0) isn't a real
+      // reading — show 0 litres for it instead of a huge negative figure,
+      // and keep measuring the next entered day against the last real one.
+      if (today[k] > 0) {
+        liters[k] = today[k] - prev[k];
+        nextPrev[k] = today[k];
+      } else {
+        liters[k] = 0;
+      }
     });
-    prev = today;
+    prev = nextPrev;
     return { date: day.date, totals: today, liters };
   });
 }
