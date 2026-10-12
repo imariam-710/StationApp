@@ -263,7 +263,11 @@ const ledgerSlice = createSlice({
       const g = state.data.grades[gradeIndex];
       if (!g) return;
       if (!Array.isArray(g.deliveries)) g.deliveries = [];
-      g.deliveries.push({ date: '', amount: 0 });
+      // Default to today's date when viewing the current month (otherwise the
+      // 1st of the viewed month), so it lands on the right day straight away.
+      const today = new Date().toISOString().slice(0, 10);
+      const date = today.startsWith(state.currentMonth) ? today : `${state.currentMonth}-01`;
+      g.deliveries.push({ date, amount: 0 });
     },
     updateDelivery(state, { payload: { gradeIndex, deliveryIndex, field, value } }) {
       const d = state.data.grades[gradeIndex]?.deliveries?.[deliveryIndex];
