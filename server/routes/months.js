@@ -225,10 +225,10 @@ function computePumpClosingReadings(doc) {
   (doc.dailySales || []).forEach((day) => {
     (day.pumps || []).forEach((dp) => {
       const c = closing[dp.pumpNo] || (closing[dp.pumpNo] = { super: 0, regular: 0, diesel: 0, vpower: 0 });
-      const manual = (doc.pumps || []).find((p) => p.pumpNo === dp.pumpNo);
+      // The day sheets are the truth: the latest day-sheet reading wins over
+      // any old manual closing figure left on the Pump Meters tab.
       FUEL_KEYS.forEach((k) => {
-        const manualClosing = manual && manual[k] && manual[k].closing;
-        if (!manualClosing && (dp[k] || 0) > 0) c[k] = dp[k];
+        if ((dp[k] || 0) > 0) c[k] = dp[k];
       });
     });
   });
@@ -237,14 +237,11 @@ function computePumpClosingReadings(doc) {
 
 // Day 1 of a month measures its litres sold against the last meter reading
 // of the previous month (the Excel ledger links day 1 to last month's final
-// day). If any pump/fuel has no opening reading yet, fill it in from the
-// most recent earlier month that has meter readings (looking back up to 6
-// months, so a skipped month doesn't break the chain). A reading already
-// entered is never overwritten.
+// day). The opening readings are taken from the most recent earlier month
+// that has meter readings (looking back up to 6 months, so a skipped month
+// doesn't break the chain).
 async function fillOpeningFromEarlierMonths(doc) {
   if (!doc || !Array.isArray(doc.pumps)) return doc;
-  const needs = () => doc.pumps.some((p) => FUEL_KEYS.some((k) => !(p[k] && p[k].opening)));
-  if (!needs()) return doc;
   let month = doc.month;
   for (let i = 0; i < 6; i++) {
     month = prevMonthStr(month);
@@ -254,12 +251,14 @@ async function fillOpeningFromEarlierMonths(doc) {
     const hasReadings = Object.values(closing).some((c) => FUEL_KEYS.some((k) => c[k] > 0));
     if (!hasReadings) continue;
     // Use ONE month only — the most recent one that has readings — so the
-    // openings never get mixed together from different months.
+    // openings never get mixed together from different months. Day 1 always
+    // starts from that month's last reading (same as the Excel ledger), so a
+    // stale or wrong opening saved earlier is replaced by the real one.
     doc.pumps.forEach((p) => {
       const c = closing[p.pumpNo];
       if (!c) return;
       FUEL_KEYS.forEach((k) => {
-        if (!(p[k] && p[k].opening) && c[k] > 0) p[k] = { ...(p[k] || {}), opening: c[k], closing: (p[k] && p[k].closing) || 0 };
+        if (c[k] > 0) p[k] = { ...(p[k] || {}), opening: c[k], closing: (p[k] && p[k].closing) || 0 };
       });
     });
     break;
