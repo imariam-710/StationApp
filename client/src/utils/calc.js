@@ -255,9 +255,7 @@ export function deliveriesTotal(grade) {
 // out how much stock had actually arrived by a given day of the month.
 export function deliveriesThroughDate(grade, dateStr) {
   const list = Array.isArray(grade?.deliveries) ? grade.deliveries : [];
-  // A delivery with no date yet still counts (from day 1) so the daily stock
-  // always agrees with the Tank Stock page's total.
-  return list.reduce((sum, d) => (!d.date || d.date <= dateStr ? sum + n(d.amount) : sum), 0);
+  return list.reduce((sum, d) => (d.date && d.date <= dateStr ? sum + n(d.amount) : sum), 0);
 }
 
 // Per-fuel stock accounting for the month:
